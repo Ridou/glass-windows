@@ -29,7 +29,7 @@ namespace Glass
     --set NAME          drag out a region and save it as NAME, then mirror it
     --region X,Y,W,H    mirror this screen rectangle directly (pixels)
     --window NAME       mirror the largest window whose title or process matches NAME
-    --mirror MODE       screen, window or auto (default auto: a window on one monitor)
+    --mirror MODE       window or screen for this run (default: Settings, which starts on window)
     --at X,Y            overlay top-left, screen pixels (default: last position)
     --scale F           overlay size multiplier (default 1.0)
     --fps N             capture rate (default 15)
@@ -164,7 +164,7 @@ namespace Glass
             var mirror = Arg("--mirror");
             if (mirror != null)
             {
-                if (mirror != "screen" && mirror != "window" && mirror != "auto") Die("--mirror takes screen, window or auto");
+                if (mirror != "screen" && mirror != "window") Die("--mirror takes window or screen");
                 App.MirrorOverride = mirror;
             }
             if (Has("--bar")) Saved.HeaderMode = HeaderMode.Pinned;

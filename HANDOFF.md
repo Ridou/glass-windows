@@ -1,4 +1,4 @@
-# Glass for Windows — handoff (2026-09-30, session 6)
+# Glass for Windows — handoff (2026-09-30, session 7)
 
 The user asked for a Windows `.exe` of Glass, zipped to share with a friend. It should have **all
 features exactly as on the Mac**, built from this Mac without live Windows testing. They work in
@@ -59,6 +59,36 @@ If you change any source, republish and rezip; the zip is only as fresh as its l
    - capture on a real GPU: that frames arrive (`capture format BGRA32`), and that the mirror
      leaves itself out (`could not exclude` must not appear);
    - mixed DPI across two monitors, and the wheel with "Scroll inactive windows" on.
+
+## What session 7 did (1.2.0, and the Mac tested live)
+
+- **The setting is now a plain choice.** "What the mirror shows" is "The game window" or "The
+  screen"; Auto is gone.
+  - **Windows defaults to the game window.** The Mac defaults to the screen, as it always
+    worked.
+  - An old saved "auto" reads as the platform's default. `--mirror window|screen`.
+- **The Mac was tested live on the user's Mac** (two displays, macOS 27), with
+  `~/Projects/glass/e2e/run.sh old`. It uses stand-ins, the real Glass, real events and
+  screenshots.
+  - Previous release c100083, screen: 17 ok, 4 failed (focus never came back after a click).
+  - New build, screen: 24 ok, 0 failed.
+  - New build, window: 26 ok, 0 failed. **Window capture is proven:** the mirror showed the
+    covered Priest.
+- **What the Mac run found and fixed** (details in the Mac repo's `.bb/AGENTS.md`):
+  - **Focus.** Cooperative activation ignores `activate()`, so Glass now falls back to
+    SkyLight's `_SLPSSetFrontProcessWithOptions`. `frontmostPID()` uses `GetFrontProcess`.
+  - **Keys.** The key decision uses `event.location`.
+  - **Clicks.** Window-mode clicks fire on release, after `stepAside`.
+- **Windows parity check for those:**
+  - Focus on Windows already uses `AttachThreadInput`, and `GetForegroundWindow` is always
+    fresh.
+  - The LL hook runs at once on its own thread, so `GetCursorPos` there is the press-time
+    position.
+  - Windows clicks already fire on release.
+  - So nothing needed porting back.
+- **Harness lesson:** an early Mac run clicked and typed into a Brave window that happened to
+  be in front. The Mac driver now stops before any input unless one of its own windows is on
+  top at that spot. Keep that rule in any live harness.
 
 ## What session 6 did (1.1.1, and Mac parity)
 

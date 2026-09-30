@@ -151,8 +151,9 @@ namespace Glass
                 if (live)
                     Line("  mirror: " + Rect(o.Bounds) + ", " + (o.Visible ? "shown" : "HIDDEN") + ", " + (Saved.Locked ? "locked" : "UNLOCKED")
                          + ", opacity " + (int)Math.Round(o.Opacity_ * 100) + "%");
-                Line("  mirror shows: " + (App.WindowMode ? "a game window" : "the screen") + " (setting: " + (App.MirrorOverride ?? Saved.MirrorMode)
-                     + ", " + Screens.All().Count + " monitor" + (Screens.All().Count == 1 ? "" : "s") + ")");
+                Line("  mirror shows: " + (App.WindowMode ? "the game window" : "the screen")
+                     + (App.MirrorOverride != null ? " (--mirror for this run)" : "")
+                     + ", " + Screens.All().Count + " monitor" + (Screens.All().Count == 1 ? "" : "s"));
                 var t = App.Target;
                 if (t != IntPtr.Zero)
                 {
@@ -199,7 +200,7 @@ namespace Glass
             if (App.Target != IntPtr.Zero && App.Capture.WindowProblem != null)
                 f.Add("Glass couldn't capture the game window, so the mirror shows the screen instead: " + App.Capture.WindowProblem);
             if (App.Hotkeys != null && App.Overlay != null && App.WindowMode && App.Target == IntPtr.Zero)
-                f.Add("One-monitor mode is on but no game window is under the mirrored region, so the screen is shown. "
+                f.Add("The mirror is set to show a game window, but no game window was under the region, so the screen is shown. "
                       + "Alt+Tab to the character whose frames you want, then press Ctrl+Alt+P and drag around them.");
             if (!Wnd.WeAreElevated)
                 foreach (var h in Wnd.AllOrdinary())

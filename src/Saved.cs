@@ -250,11 +250,13 @@ namespace Glass
             set => SetBool("clicksViaPid", value);
         }
 
-        /// What the mirror shows: "auto" (a window on one monitor, the screen on more),
-        /// "screen" or "window".
+        /// What the mirror shows: "window" (the game window, which keeps showing while another
+        /// window covers it) or "screen" (whatever is at that spot on screen). Windows defaults
+        /// to the window: most players Alt+Tab between clients on one monitor. The Mac build
+        /// defaults to the screen. An old "auto" reads as the default.
         public static string MirrorMode
         {
-            get { var m = GetString("mirrorMode", "auto"); return m == "screen" || m == "window" ? m : "auto"; }
+            get => GetString("mirrorMode", "window") == "screen" ? "screen" : "window";
             set => SetString("mirrorMode", value);
         }
 

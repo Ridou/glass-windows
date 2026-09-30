@@ -25,7 +25,7 @@ namespace Glass
 
         /// From the command line; the rest of the state lives in Saved.
         public static double Fps = 15;
-        /// --mirror screen|window|auto, for this run only. Null means use Settings.
+        /// --mirror window|screen, for this run only. Null means use Settings.
         public static string MirrorOverride;
 
         /// The window being mirrored in window mode, or zero when the screen is.
@@ -89,18 +89,9 @@ namespace Glass
         // MARK: - Screen or window
 
         /// Mirror a game window rather than the screen? A window keeps showing while another
-        /// window covers it, which is what one monitor and Alt+Tab need; with two monitors the
-        /// screen is simpler and proven. Auto picks by the number of monitors.
-        public static bool WindowMode
-        {
-            get
-            {
-                var mode = MirrorOverride ?? Saved.MirrorMode;
-                if (mode == "window") return true;
-                if (mode == "screen") return false;
-                return Screens.All().Count == 1;
-            }
-        }
+        /// window covers it, which is what one monitor and Alt+Tab need. The screen mirrors
+        /// whatever is at that spot, such as a client on another monitor.
+        public static bool WindowMode => (MirrorOverride ?? Saved.MirrorMode) != "screen";
 
         /// Where a window really is on screen. The window rectangle includes invisible resize
         /// borders on Windows 10 and 11; the frame bounds are what is drawn, and what window

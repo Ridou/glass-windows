@@ -41,10 +41,10 @@ FIRST RUN
    want it, then press Ctrl+Alt+L again to lock it (faint green edge).
 
 
-ONE MONITOR (ALT+TAB BETWEEN CHARACTERS)
-----------------------------------------
-With one monitor, Glass mirrors the other character's game window itself, so the mirror
-keeps showing it while you play the other character on top of it.
+THE GAME WINDOW OR THE SCREEN
+-----------------------------
+Glass mirrors the other character's game window itself, so the mirror keeps showing it
+even while you play the other character on top of it, on one monitor with Alt+Tab.
 
 1. Alt+Tab to the character whose frames you want (the healer, say).
 2. Press Ctrl+Alt+P and drag around the party frames.
@@ -58,8 +58,8 @@ If clicks on the mirror don't do anything in the game, open Settings > Regions a
 "Clicks on a covered window" to "Bring it forward". The healer's window then flashes up
 for a moment with each click.
 
-With two or more monitors, Glass mirrors the part of the screen you pick. You can change
-this in Settings > Regions > "What the mirror shows".
+To mirror a spot on the screen instead, such as the healer on a second monitor, choose
+Settings > Regions > "What the mirror shows" > "The screen".
 
 
 USING IT

@@ -203,16 +203,16 @@ namespace Glass
             // One monitor: mirror a game window, which keeps showing while another covers it.
             int m = 300;
             Text_(v, "What the mirror shows", 16, m, 300, 22, true, 9.5f);
-            mirrorModes = Choice(v, 16, m + 26, 132, new[] { "Auto", "The screen", "A game window" }, i =>
+            mirrorModes = Choice(v, 16, m + 26, 160, new[] { "The game window", "The screen" }, i =>
             {
-                Saved.MirrorMode = new[] { "auto", "screen", "window" }[i];
+                Saved.MirrorMode = new[] { "window", "screen" }[i];
                 var r = Saved.Region;
                 if (r.HasValue && App.Overlay != null) App.Begin(r.Value, Saved.ActivePreset);
                 RefreshAll();
             });
-            Hint(v, "A game window keeps showing even while another window covers it: two clients on one monitor, "
-                    + "switching with Alt+Tab. Pick the region while that client is in front. Auto uses a game window "
-                    + "with one monitor and the screen with more.", 16, m + 60, W - 32, 32);
+            Hint(v, "The game window keeps showing even while another window covers it: two clients on one monitor, "
+                    + "switching with Alt+Tab. Pick the region while that client is in front. The screen shows "
+                    + "whatever is at that spot, such as a client on another monitor.", 16, m + 60, W - 32, 32);
             mirrorStatus = Text_(v, "", 16, m + 96, W - 32, 18, false, 8.5f, Secondary);
 
             int c = m + 128;
@@ -779,8 +779,8 @@ namespace Glass
                 var modes = new[] { HeaderMode.Auto, HeaderMode.Pinned, HeaderMode.Hidden };
                 for (int i = 0; i < 3; i++) headerModes[i].Checked = modes[i] == Saved.HeaderMode;
 
-                var mirror = new[] { "auto", "screen", "window" };
-                for (int i = 0; i < 3; i++) mirrorModes[i].Checked = mirror[i] == Saved.MirrorMode;
+                mirrorModes[0].Checked = Saved.MirrorMode == "window";
+                mirrorModes[1].Checked = Saved.MirrorMode == "screen";
                 hiddenClickModes[0].Checked = Saved.HiddenClicks == "post";
                 hiddenClickModes[1].Checked = Saved.HiddenClicks == "front";
                 var t = App.Target;
