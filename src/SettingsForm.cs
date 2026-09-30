@@ -141,8 +141,13 @@ namespace Glass
         public void PaintChrome(Graphics g)
         {
             g.SmoothingMode = SmoothingMode.AntiAlias;
-            g.Clear(Color.Black);
             var frame = FrameRect;
+            // The whole window is stone, not only the frame. The side tabs reach part way
+            // down and the margin the portrait overhangs into is empty; left black, those
+            // read as a slab beside the frame on any desktop that is not already black.
+            Theme.Fill(g, Theme.Stone, ClientRectangle, Point.Empty);
+            using (var shade = new SolidBrush(Color.FromArgb(130, 0, 0, 0)))
+                g.FillRectangle(shade, ClientRectangle);
 
             var state = g.Save();
             using (var clip = Theme.Round(RectangleF.Inflate(frame, -4, -4), 3)) g.SetClip(clip);
