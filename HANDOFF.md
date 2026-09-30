@@ -8,9 +8,8 @@ GSD phases (Research → Plan → Clear context → Execute → Verify) and hand
 **This repo:** `~/Projects/glass-windows`, remote `git@github.com:Ridou/glass-windows.git`, branch
 `main`. The user wants the Windows port kept separate from the Mac repo
 (`~/Projects/glass`, remote `Ridou/glass`), where the Mac source `glass.swift` lives. This
-checkout was copied from `~/Projects/glass/windows/` at the end of session 3. It builds and
-passes every check here. **Nothing is committed or pushed yet**, and the old copy in the Mac
-repo has not been removed.
+checkout was moved out of `~/Projects/glass/windows/` at the end of session 3. It was pushed to
+GitHub, and the old copy is deleted.
 
 ## Milestones
 
@@ -25,7 +24,7 @@ repo has not been removed.
 | 7 | `README.txt` for the friend | ✅ session 3 | `README.txt`: ASCII, CRLF, 103 lines, published beside the exe |
 | 8 | Zip plus ignore rules | ✅ session 3 | `dist/Glass-Windows.zip`, 60 MB: `Glass/Glass.exe`, `Glass/README.txt`. Ignore rules in `.gitignore` |
 | 9 | Final self-review | ✅ session 3 | P/Invoke layouts, thread affinity, exit flushing; 2 small fixes |
-| 10 | Move to `Ridou/glass-windows` | 🟡 session 3 | Copied and verified here; commit, push and removing the old copy await the user's go |
+| 10 | Move to `Ridou/glass-windows` | ✅ session 3 | First commit pushed to `main`; the old copy in the Mac repo is removed |
 | 11 | Live test on real Windows | ⏳ the friend | Needs Windows and two WoW clients. Ask for `Glass.log` back |
 
 Zip SHA-256 of the exe inside: `156b5c42a0cd4d047071a6538e4eef5cbd814029bec0f271dfddf12e3fa041d5`.
@@ -33,20 +32,15 @@ If you change any source, republish and rezip; the zip is only as fresh as its l
 
 ## Next
 
-1. **With the user's go:** make the first commit here and push `main`. The files are: sources,
-   `README.md`, `README.txt`, `HANDOFF.md`, `tools/`, `addon/`, `Glass.ico` (needed to build) and
-   `.gitignore`. Build outputs are ignored.
-2. **With the user's go:** delete `~/Projects/glass/windows/`. The Mac repo's `git status` is then
-   clean again. Its `.gitignore` was never changed.
-3. Optionally, attach `dist/Glass-Windows.zip` to a GitHub release rather than committing it. This
+1. Optionally, attach `dist/Glass-Windows.zip` to a GitHub release rather than committing it. This
    is outward-facing, so ask first.
-4. **Optional, only with the user's OK:** a headless run of the *full app*, for example
+2. **Optional, only with the user's OK:** a headless run of the *full app*, for example
    `tools/wine.sh 30 dist/Glass/Glass.exe --region 0,0,320,200`, then read `Glass.log`.
    - It would exercise startup, capture, the overlay, the tray and the hotkeys, which
      `--selftest` doesn't cover.
    - The null driver means nothing can appear on the Mac. The standing rule is still to ask
      before launching the full GUI.
-5. The friend's live test on real Windows (milestone 11). Ask for `Glass.log` back.
+3. The friend's live test on real Windows (milestone 11). Ask for `Glass.log` back.
 
 ## What session 3 did (milestones 6–9)
 
