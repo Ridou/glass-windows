@@ -65,7 +65,10 @@
   </Resources>
 
   <Applications>
-    <Application Id="Glass" Executable="Glass.exe" EntryPoint="Windows.FullTrustApplication"
+    <!-- TrustLevel + RuntimeBehavior is the modern way to say "a full-trust Win32 program",
+         and it replaces EntryPoint="Windows.FullTrustApplication". Declaring both is rejected:
+         "Application with RuntimeBehavior value win32App must not declare EntryPoint". -->
+    <Application Id="Glass" Executable="Glass.exe"
                  uap10:TrustLevel="mediumIL" uap10:RuntimeBehavior="win32App">
       <uap:VisualElements
         DisplayName="Glass Mirror"
