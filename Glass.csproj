@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <!-- Lets the Windows build be made on a Mac. -->
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+
+    <!-- One file, nothing to install: the .NET runtime travels inside Glass.exe. -->
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <DebugType>none</DebugType>
+
+    <!-- tools/ holds test harnesses with stand-in types; dist/ holds the published zip. -->
+    <DefaultItemExcludes>$(DefaultItemExcludes);tools/**;dist/**</DefaultItemExcludes>
+    <AssemblyName>Glass</AssemblyName>
+    <RootNamespace>Glass</RootNamespace>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <LangVersion>latest</LangVersion>
+    <ApplicationIcon>Glass.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+
+    <Product>Glass</Product>
+    <AssemblyTitle>Glass</AssemblyTitle>
+    <Description>Mirror a screen region as an always-on-top overlay that clicks through to the real thing.</Description>
+    <Version>1.0.0</Version>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <FileVersion>1.0.0.0</FileVersion>
+    <Copyright>Ridou</Copyright>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Glass.ico" LogicalName="Glass.ico" />
+    <EmbeddedResource Include="addon\Core.lua" LogicalName="Core.lua" />
+    <EmbeddedResource Include="addon\GlassSetup.toc" LogicalName="GlassSetup.toc" />
+    <!-- Beside Glass.exe in the published folder, not packed inside it. -->
+    <None Include="README.txt" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
+  </ItemGroup>
+
+</Project>

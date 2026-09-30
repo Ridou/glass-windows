@@ -1,0 +1,8 @@
+# Build outputs. This folder is headed for its own repo (Ridou/glass-windows), where this
+# file becomes the root .gitignore.
+bin/
+obj/
+dist/
+.makeicon-win
+tools/wowdiff/cs/bin/
+tools/wowdiff/cs/obj/

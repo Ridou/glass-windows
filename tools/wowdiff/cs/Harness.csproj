@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <AssemblyName>Harness</AssemblyName>
+    <RootNamespace>Glass</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../../src/WowSettings.cs" />
+    <EmbeddedResource Include="../../../addon/Core.lua" LogicalName="Core.lua" />
+    <EmbeddedResource Include="../../../addon/GlassSetup.toc" LogicalName="GlassSetup.toc" />
+  </ItemGroup>
+</Project>

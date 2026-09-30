@@ -1,0 +1,510 @@
+// Sending input to the real thing underneath.
+//
+// Two paths, the same two the macOS build has:
+//
+//   Warp  -- move the real cursor to the source point, act, warp back, hand focus back to
+//            whoever had it. The default, and the one known to work.
+//   Post  -- PostMessage straight at the target window, cursor untouched. On macOS the
+//            equivalent (CGEventPostToPid) is dead for mouse events; on Windows it is not, so
+//            here it is a real option. It stays off by default for clicks: a game that reads
+//            the cursor rather than the message will ignore a posted click, and failing
+//            visibly beats failing quietly on a heal. For keys it is the default, exactly as
+//            on the Mac -- HotkeyNet has sent keys to background WoW windows this way for years.
+//
+// Every button and modifier is forwarded exactly as pressed -- Clique binds spells to
+// combinations like shift-right-click, so anything less than full fidelity would fire the
+// wrong spell rather than fail visibly. On the warp path modifiers need no synthesis: your
+// real Shift or Alt is physically down while the click is routed, and the target reads it
+// from the keyboard state.
+//
+// Everything runs on one serial worker thread. The UI thread and the hook thread only ever
+// enqueue, so neither can be held up by a warp, a sleep, or a slow window.
+
+using System;
+using System.Collections.Concurrent;
+using System.Diagnostics;
+using System.Drawing;
+using System.Runtime.InteropServices;
+using System.Threading;
+using System.Windows.Forms;
+
+namespace Glass
+{
+    public static class Forward
+    {
+        /// Marks input Glass synthesizes, so its own keyboard hook never re-forwards it.
+        public static readonly IntPtr GlassTag = new IntPtr(0x474C5353);   // 'GLSS'
+
+        // Local latency per forwarded action. These are the whole cost this project exists to
+        // remove, so they are tunable (--step, --settle, --hover) rather than baked in.
+        public static int StepMs = 20;
+        public static int SettleMs = 40;
+        /// How long the pointer rests over a frame before a forwarded key is sent. Windows
+        /// hands a window its posted messages *before* its mouse input, so a key posted too soon
+        /// can be read before the client has noticed the pointer arrived -- and cast on whatever
+        /// it was hovering before. 35ms covers one frame of a client capped at 30 fps.
+        public static int HoverMs = 35;
+
+        /// --pid: route clicks with PostMessage for this run, whatever Settings says.
+        public static bool ForcePost;
+
+        static readonly BlockingCollection<Action> jobs = new BlockingCollection<Action>();
+        static Thread worker;
+
+        public static void Start()
+        {
+            worker = new Thread(() =>
+            {
+                Wnd.EnsureMessageQueue();
+                foreach (var job in jobs.GetConsumingEnumerable())
+                {
+                    try { job(); }
+                    catch (Exception e) { Log.Write("forward: " + e.Message); }
+                }
+            }) { IsBackground = true, Name = "glass.forward" };
+            worker.Start();
+        }
+
+        static void Pause(int ms) { if (ms > 0) Thread.Sleep(ms); }
+
+        // MARK: - Where the pointer really is
+
+        /// Set while a job has the cursor warped away. The pointer's *real* position is then the
+        /// pre-warp one, and that is what hover tests and key claims must use.
+        static volatile object warpOrigin;
+
+        public static Point RealPointer()
+        {
+            var o = warpOrigin;
+            if (o != null) return (Point)o;
+            Native.GetCursorPos(out POINT p);
+            return new Point(p.X, p.Y);
+        }
+
+        // MARK: - Buttons
+
+        /// Swapped buttons (left-handed mouse settings) apply to synthesized input and to
+        /// GetAsyncKeyState, which both speak physical buttons. Window messages speak logical
+        /// ones. Translate once, here.
+        static MouseButtons Physical(MouseButtons logical)
+        {
+            if (Native.GetSystemMetrics(Native.SM_SWAPBUTTON) == 0) return logical;
+            if (logical == MouseButtons.Left) return MouseButtons.Right;
+            if (logical == MouseButtons.Right) return MouseButtons.Left;
+            return logical;
+        }
+
+        static int Vk(MouseButtons physical)
+        {
+            switch (physical)
+            {
+                case MouseButtons.Right: return Native.VK_RBUTTON;
+                case MouseButtons.Middle: return Native.VK_MBUTTON;
+                case MouseButtons.XButton1: return Native.VK_XBUTTON1;
+                case MouseButtons.XButton2: return Native.VK_XBUTTON2;
+                default: return Native.VK_LBUTTON;
+            }
+        }
+
+        static void ButtonFlags(MouseButtons physical, out uint down, out uint up, out uint data)
+        {
+            data = 0;
+            switch (physical)
+            {
+                case MouseButtons.Right:
+                    down = Native.MOUSEEVENTF_RIGHTDOWN; up = Native.MOUSEEVENTF_RIGHTUP; return;
+                case MouseButtons.Middle:
+                    down = Native.MOUSEEVENTF_MIDDLEDOWN; up = Native.MOUSEEVENTF_MIDDLEUP; return;
+                case MouseButtons.XButton1:
+                    down = Native.MOUSEEVENTF_XDOWN; up = Native.MOUSEEVENTF_XUP; data = Native.XBUTTON1; return;
+                case MouseButtons.XButton2:
+                    down = Native.MOUSEEVENTF_XDOWN; up = Native.MOUSEEVENTF_XUP; data = Native.XBUTTON2; return;
+                default:
+                    down = Native.MOUSEEVENTF_LEFTDOWN; up = Native.MOUSEEVENTF_LEFTUP; return;
+            }
+        }
+
+        /// A forwarded click is synthesized only once your real button is back up. While it is
+        /// held, Windows still counts that button as down and routes button messages to the
+        /// window that took the press -- the overlay -- so a click made then would land on
+        /// Glass itself. The cost is the length of your press, typically well under 100ms.
+        static bool WaitForRelease(MouseButtons logical)
+        {
+            int vk = Vk(Physical(logical));
+            var sw = Stopwatch.StartNew();
+            while ((Native.GetAsyncKeyState(vk) & 0x8000) != 0)
+            {
+                // A two-second hold is not a click. Refuse rather than click into a drag.
+                if (sw.ElapsedMilliseconds > 2000) return false;
+                Thread.Sleep(1);
+            }
+            return true;
+        }
+
+        // MARK: - Public entry points (any thread)
+
+        public static void Click(Point target, MouseButtons button)
+        {
+            bool post = ForcePost || Saved.ClicksViaPid;
+            jobs.Add(() =>
+            {
+                if (!WaitForRelease(button))
+                {
+                    Log.Write("click " + button + " held over 2s -- not forwarded");
+                    return;
+                }
+                if (post) PostClick(target, button); else WarpClick(target, button);
+            });
+        }
+
+        public static void Scroll(Point target, int notches)
+        {
+            if (notches == 0) return;
+            bool post = ForcePost || Saved.ClicksViaPid;
+            jobs.Add(() => { if (post) PostScroll(target, notches); else WarpScroll(target, notches); });
+        }
+
+        static int routingLogged;
+
+        /// With "Scroll inactive windows when I hover over them" turned off, Windows sends the
+        /// wheel to the focused window -- the character you are playing -- wherever the pointer
+        /// is. A synthesized wheel would then zoom the wrong camera, so it has to be posted.
+        static bool WheelFollowsPointer()
+        {
+            if (!Native.SystemParametersInfo(Native.SPI_GETMOUSEWHEELROUTING, 0, out uint routing, 0))
+                return true;                           // older than 1703: the pointer, always
+            bool follows = routing != Native.MOUSEWHEEL_ROUTING_FOCUS;
+            if (!follows && Interlocked.Exchange(ref routingLogged, 1) == 0)
+                Log.Write("\"Scroll inactive windows\" is off, so the wheel is posted to the hovered client instead");
+            return follows;
+        }
+
+        /// Called from the keyboard hook, so it only enqueues: `viaPost` comes from the hook's
+        /// snapshot rather than from Saved, which would mean taking a lock.
+        public static void Key(int vk, Point target, uint mods, bool viaPost)
+        {
+            jobs.Add(() => RunKeyJob(vk, target, mods, viaPost));
+        }
+
+        // MARK: - Warp there and back
+
+        static INPUT MouseInput(uint flags, uint data = 0) => new INPUT
+        {
+            type = Native.INPUT_MOUSE,
+            u = new InputUnion { mi = new MOUSEINPUT { dwFlags = flags, mouseData = data, dwExtraInfo = GlassTag } },
+        };
+
+        static INPUT KeyInput(int vk, bool up) => new INPUT
+        {
+            type = Native.INPUT_KEYBOARD,
+            u = new InputUnion
+            {
+                ki = new KEYBDINPUT
+                {
+                    wVk = (ushort)vk,
+                    wScan = (ushort)Native.MapVirtualKey((uint)vk, 0),
+                    dwFlags = up ? Native.KEYEVENTF_KEYUP : 0,
+                    dwExtraInfo = GlassTag,
+                },
+            },
+        };
+
+        static int blockedLogged;
+        static readonly ConcurrentDictionary<uint, bool> elevated = new ConcurrentDictionary<uint, bool>();
+        static int elevationWarned;
+
+        /// Windows silently discards input a normal program sends to one running as
+        /// administrator -- SendInput still reports success. Nothing Glass does can reach such a
+        /// window, so say so once, where it will be seen, instead of failing quietly on a heal.
+        static void CheckReachable(IntPtr hWnd)
+        {
+            if (hWnd == IntPtr.Zero) return;
+            Native.GetWindowThreadProcessId(hWnd, out uint pid);
+            if (pid == 0) return;
+            bool up = elevated.GetOrAdd(pid, p => Wnd.IsElevated(p) && !Wnd.WeAreElevated);
+            if (!up || Interlocked.Exchange(ref elevationWarned, 1) != 0) return;
+            var name = Wnd.ProcessName(hWnd);
+            Log.Write(name + " runs as administrator; Windows blocks Glass from sending it input");
+            App.Warn("Glass cannot reach " + name,
+                     name + " is running as administrator, so Windows blocks Glass's clicks and keys. "
+                     + "Run Glass as administrator too, or start the game normally.");
+        }
+
+        static void Send(INPUT input)
+        {
+            var sent = Native.SendInput(1, new[] { input }, Marshal.SizeOf<INPUT>());
+            if (sent == 0 && Interlocked.Exchange(ref blockedLogged, 1) == 0)
+                Log.Write("SendInput was refused (error " + Marshal.GetLastWin32Error()
+                          + "). If the game runs as administrator, Glass must too.");
+        }
+
+        /// Shared warp-there-and-back, so every input kind behaves identically.
+        ///
+        /// A real click on a background window activates it -- that is Windows, not something
+        /// we can post our way around. Remember who had focus and hand it straight back. Unlike
+        /// macOS, the activation happens when the clicked window next pumps its messages, which
+        /// for a background client at 30 fps can be most of a frame later. So after a click,
+        /// wait to see it happen before handing focus back, or it would happen afterwards and
+        /// quietly give the other character your keyboard.
+        ///
+        /// There is no Windows equivalent of CGAssociateMouseAndMouseCursorPosition: a client in
+        /// mouse-look sees the round trip as two equal and opposite movements. The camera ends
+        /// where it started, but can flick for a frame. Post mode avoids the trip entirely.
+        static void WithWarp(Point target, bool expectActivation, Action body)
+        {
+            IntPtr wasFront = Native.GetForegroundWindow();
+            IntPtr clicked = expectActivation ? Wnd.At(target) : IntPtr.Zero;
+            CheckReachable(expectActivation ? clicked : Wnd.At(target));
+            Native.GetCursorPos(out POINT origin);
+            warpOrigin = new Point(origin.X, origin.Y);
+            try
+            {
+                // SetCursorPos rather than an absolute SendInput move: absolute moves are
+                // normalised to 0..65535 across the whole desktop and can land a pixel off, and
+                // a pixel is the difference between two party frames.
+                Native.SetCursorPos(target.X, target.Y);
+                Pause(StepMs);
+                body();
+            }
+            finally
+            {
+                Pause(SettleMs);                                // must not race delivery
+                Native.SetCursorPos(origin.X, origin.Y);
+                warpOrigin = null;
+                RestoreFocus(wasFront, clicked);
+            }
+        }
+
+        static void RestoreFocus(IntPtr wasFront, IntPtr clicked)
+        {
+            if (wasFront == IntPtr.Zero || Wnd.IsOurs(wasFront)) return;
+            if (clicked != IntPtr.Zero && clicked != wasFront)
+            {
+                // Give the clicked client up to 150ms to take focus, so it cannot do so after
+                // we have already handed focus back.
+                var sw = Stopwatch.StartNew();
+                while (Native.GetForegroundWindow() == wasFront && sw.ElapsedMilliseconds < 150) Thread.Sleep(2);
+            }
+            if (Native.GetForegroundWindow() == wasFront) return;
+            bool ok = Wnd.FocusAndWait(wasFront, 150, 2);
+            if (!ok)
+            {
+                Log.Write("focus back to " + Wnd.ProcessName(wasFront) + " FAILED");
+                System.Media.SystemSounds.Beep.Play();
+            }
+        }
+
+        static void WarpClick(Point global, MouseButtons button)
+        {
+            var t0 = Stopwatch.StartNew();
+            ButtonFlags(Physical(button), out uint down, out uint up, out uint data);
+            WithWarp(global, true, () =>
+            {
+                // Re-pin right before each press: Windows has no way to hold the pointer still,
+                // so a hand still moving the mouse would otherwise carry it off the frame during
+                // the pause, and the click would land on whatever it drifted to.
+                Native.SetCursorPos(global.X, global.Y);
+                Send(MouseInput(down, data));
+                Pause(StepMs);
+                Native.SetCursorPos(global.X, global.Y);
+                Send(MouseInput(up, data));
+                Pause(StepMs);
+            });
+            Log.Write(string.Format("click {0} at {1},{2} via warp, {3:F0}ms", button, global.X, global.Y,
+                                    t0.Elapsed.TotalMilliseconds));
+        }
+
+        static void WarpScroll(Point global, int notches)
+        {
+            bool follows = WheelFollowsPointer();
+            WithWarp(global, false, () =>
+            {
+                Native.SetCursorPos(global.X, global.Y);
+                if (follows) Send(MouseInput(Native.MOUSEEVENTF_WHEEL, unchecked((uint)(notches * Native.WHEEL_DELTA))));
+                else PostScroll(global, notches);       // the pointer is there for mouseover binds
+                Pause(StepMs);
+            });
+            Log.Write("wheel " + (notches > 0 ? "up" : "down") + " at " + global.X + "," + global.Y
+                      + (follows ? " via warp" : " via warp and post"));
+        }
+
+        // MARK: - Post straight at the window
+
+        static int HeldModifiers()
+        {
+            int f = 0;
+            if ((Native.GetAsyncKeyState(Native.VK_SHIFT) & 0x8000) != 0) f |= Native.MK_SHIFT;
+            if ((Native.GetAsyncKeyState(Native.VK_CONTROL) & 0x8000) != 0) f |= Native.MK_CONTROL;
+            return f;
+        }
+
+        static int ButtonMask(MouseButtons b)
+        {
+            switch (b)
+            {
+                case MouseButtons.Left: return Native.MK_LBUTTON;
+                case MouseButtons.Right: return Native.MK_RBUTTON;
+                case MouseButtons.Middle: return Native.MK_MBUTTON;
+                case MouseButtons.XButton1: return Native.MK_XBUTTON1;
+                case MouseButtons.XButton2: return Native.MK_XBUTTON2;
+                default: return 0;
+            }
+        }
+
+        /// Path A: no cursor movement, no focus change. PostMessage never waits on the game.
+        static void PostClick(Point global, MouseButtons button)
+        {
+            var hWnd = Wnd.At(global);
+            if (hWnd == IntPtr.Zero) { Log.Write("post click: no window under " + global); return; }
+            CheckReachable(hWnd);
+
+            var p = new POINT(global.X, global.Y);
+            Native.ScreenToClient(hWnd, ref p);
+            var at = Native.MakeLParam(p.X, p.Y);
+
+            int downMsg, upMsg, xbutton = 0;
+            switch (button)
+            {
+                case MouseButtons.Right: downMsg = Native.WM_RBUTTONDOWN; upMsg = Native.WM_RBUTTONUP; break;
+                case MouseButtons.Middle: downMsg = Native.WM_MBUTTONDOWN; upMsg = Native.WM_MBUTTONUP; break;
+                case MouseButtons.XButton1:
+                    downMsg = Native.WM_XBUTTONDOWN; upMsg = Native.WM_XBUTTONUP; xbutton = Native.XBUTTON1; break;
+                case MouseButtons.XButton2:
+                    downMsg = Native.WM_XBUTTONDOWN; upMsg = Native.WM_XBUTTONUP; xbutton = Native.XBUTTON2; break;
+                default: downMsg = Native.WM_LBUTTONDOWN; upMsg = Native.WM_LBUTTONUP; break;
+            }
+
+            int mods = HeldModifiers();
+            Native.PostMessage(hWnd, Native.WM_MOUSEMOVE, new IntPtr(mods), at);
+            Pause(StepMs);
+            Native.PostMessage(hWnd, downMsg, new IntPtr((xbutton << 16) | mods | ButtonMask(button)), at);
+            Pause(StepMs);
+            Native.PostMessage(hWnd, upMsg, new IntPtr((xbutton << 16) | mods), at);
+            Log.Write("click " + button + " -> " + Wnd.ProcessName(hWnd) + " at " + p.X + "," + p.Y + " via post");
+        }
+
+        static void PostScroll(Point global, int notches)
+        {
+            var hWnd = Wnd.At(global);
+            if (hWnd == IntPtr.Zero) { Log.Write("post scroll: no window under " + global); return; }
+            CheckReachable(hWnd);
+            // WM_MOUSEWHEEL carries *screen* coordinates, unlike every other mouse message.
+            var w = new IntPtr(unchecked((notches * Native.WHEEL_DELTA) << 16) | HeldModifiers());
+            Native.PostMessage(hWnd, Native.WM_MOUSEWHEEL, w, Native.MakeLParam(global.X, global.Y));
+        }
+
+        // MARK: - Keys
+
+        static IntPtr KeyLParam(int vk, bool up, bool altHeld)
+        {
+            uint scan = Native.MapVirtualKey((uint)vk, 0);
+            long l = 1 | ((long)scan << 16);
+            if (altHeld) l |= 1L << 29;                    // context code: Alt is down
+            if (up) l |= (1L << 30) | (1L << 31);          // previous state, transition
+            return new IntPtr(l);
+        }
+
+        static void PostKey(IntPtr hWnd, int vk, bool up, bool alt)
+        {
+            int msg = alt ? (up ? Native.WM_SYSKEYUP : Native.WM_SYSKEYDOWN)
+                          : (up ? Native.WM_KEYUP : Native.WM_KEYDOWN);
+            Native.PostMessage(hWnd, msg, new IntPtr(vk), KeyLParam(vk, up, alt));
+        }
+
+        /// A background client's own keyboard state never saw the Shift you are holding -- it
+        /// went to the window you are playing. So posted keys carry their modifiers as posted
+        /// key messages too, in press order, released in reverse, the way HotkeyNet does it.
+        static void PostKeyWithModifiers(IntPtr hWnd, int vk, uint mods)
+        {
+            bool alt = (mods & Native.MOD_ALT) != 0;
+            bool ctrl = (mods & Native.MOD_CONTROL) != 0;
+            bool shift = (mods & Native.MOD_SHIFT) != 0;
+
+            if (ctrl) PostKey(hWnd, Native.VK_CONTROL, false, false);
+            if (shift) PostKey(hWnd, Native.VK_SHIFT, false, false);
+            if (alt) PostKey(hWnd, Native.VK_MENU, false, true);
+            PostKey(hWnd, vk, false, alt);
+            Pause(StepMs);
+            PostKey(hWnd, vk, true, alt);
+            if (alt) PostKey(hWnd, Native.VK_MENU, true, false);
+            if (shift) PostKey(hWnd, Native.VK_SHIFT, true, false);
+            if (ctrl) PostKey(hWnd, Native.VK_CONTROL, true, false);
+        }
+
+        /// Runs on the forwarding worker. Jobs are serial and each restores focus before it
+        /// ends, so whoever has focus when a job starts is the right one to hand it back to.
+        static void RunKeyJob(int vk, Point at, uint mods, bool viaPost)
+        {
+            var t0 = Stopwatch.StartNew();
+            Func<string> ms = () => string.Format("{0:F0}ms", t0.Elapsed.TotalMilliseconds);
+            string name = Shortcut.Name(vk);
+
+            var target = Wnd.At(at);
+            if (target == IntPtr.Zero)
+            {
+                Log.Write("key " + name + ": no window under " + at.X + "," + at.Y + " -- dropped");
+                System.Media.SystemSounds.Beep.Play();
+                return;
+            }
+            CheckReachable(target);
+
+            IntPtr home = Native.GetForegroundWindow();
+            Native.GetCursorPos(out POINT origin);
+            warpOrigin = new Point(origin.X, origin.Y);
+            try
+            {
+                // Warp so the client knows which frame the pointer is over. A mouseover bind is
+                // only meaningful with the cursor actually there.
+                Native.SetCursorPos(at.X, at.Y);
+                if (viaPost)
+                {
+                    Pause(Math.Max(StepMs, HoverMs));
+                    Native.SetCursorPos(at.X, at.Y);           // re-pin; see WarpClick
+                    // Posted messages are read in the order they were posted, but all of them
+                    // before any mouse input. A client that has not run since the warp would read
+                    // the key before the move and act on whatever it hovered last. A posted move
+                    // of our own, just ahead of the key, puts the two back in order -- the order
+                    // the Mac build gets for free from one event stream.
+                    var client = new POINT(at.X, at.Y);
+                    Native.ScreenToClient(target, ref client);
+                    Native.PostMessage(target, Native.WM_MOUSEMOVE, IntPtr.Zero, Native.MakeLParam(client.X, client.Y));
+                    PostKeyWithModifiers(target, vk, mods);
+                    Pause(StepMs);
+                }
+                else
+                {
+                    Pause(StepMs);
+                    // Never guess: if the target did not come forward, the key would land on the
+                    // other character. Refuse loudly instead.
+                    if (!Wnd.FocusAndWait(target, 250, 2))
+                    {
+                        Log.Write("key " + name + ": target never came forward at " + ms() + " -- refused");
+                        System.Media.SystemSounds.Beep.Play();
+                        return;
+                    }
+                    Native.SetCursorPos(at.X, at.Y);           // now active, it re-reads the hover
+                    Pause(Math.Max(StepMs, HoverMs));
+                    Native.SetCursorPos(at.X, at.Y);
+                    Send(KeyInput(vk, false));
+                    Pause(StepMs);
+                    Send(KeyInput(vk, true));
+                    Pause(StepMs);
+                }
+                Log.Write("key " + name + " -> " + Wnd.ProcessName(target)
+                          + (viaPost ? " via post" : " via focus") + " at " + ms());
+            }
+            finally
+            {
+                Pause(SettleMs);                               // must not race delivery
+                Native.SetCursorPos(origin.X, origin.Y);
+                warpOrigin = null;
+                if (!viaPost && home != IntPtr.Zero && home != target && !Wnd.IsOurs(home))
+                {
+                    bool ok = Wnd.FocusAndWait(home, 300, 3);
+                    Log.Write("key " + name + ": focus back " + (ok ? "ok" : "FAILED") + " at " + ms());
+                    if (!ok) System.Media.SystemSounds.Beep.Play();
+                }
+            }
+        }
+    }
+}
