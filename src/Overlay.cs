@@ -137,7 +137,6 @@ namespace Glass
         {
             base.OnLocationChanged(e);
             if (!IsHandleCreated) return;
-            Saved.OverlayOrigin = Location;
             Bar?.Place(Bounds);
             App.Publish();
         }
@@ -184,8 +183,32 @@ namespace Glass
         void Route(IntPtr lParam, MouseButtons button)
         {
             var global = new Point(Left + Native.LoWord(lParam), Top + Native.HiWord(lParam));
-            Forward.Click(SourcePoint(global), button);
+            var target = SourcePoint(global);
+            if (Covers(target)) return;
+            Forward.Click(target, button);
         }
+
+        bool coverWarned;
+
+        /// True if the point a click would go to is under Glass itself: the mirror placed over
+        /// the region it mirrors. The click would land back on the mirror, so it is refused, and
+        /// said once, since nothing else would explain the dead clicks.
+        bool Covers(Point target)
+        {
+            bool covered = Bounds.Contains(target) || (Bar != null && Bar.Visible && Bar.Bounds.Contains(target));
+            if (covered && !coverWarned)
+            {
+                coverWarned = true;
+                App.Warn("The mirror covers what it mirrors",
+                         "Glass cannot click through to a spot it is covering. Unlock the mirror (Ctrl+Alt+L by default) "
+                         + "and drag it off the region it shows.");
+            }
+            return covered;
+        }
+
+        /// Input Glass synthesized itself. It only arrives here if something is wrong -- the
+        /// mirror covering its own region -- and forwarding it would click forever.
+        static bool Ours() => Native.GetMessageExtraInfo() == Forward.GlassTag;
 
         void Wheel(Message m)
         {
@@ -203,11 +226,16 @@ namespace Glass
             wheelAccum = 0;
             // WM_MOUSEWHEEL carries screen coordinates.
             var global = new Point(Native.LoWord(m.LParam), Native.HiWord(m.LParam));
-            Forward.Scroll(SourcePoint(global), notch);
+            var target = SourcePoint(global);
+            if (Covers(target)) return;
+            Forward.Scroll(target, notch);
         }
 
         protected override void WndProc(ref Message m)
         {
+            if (m.Msg >= Native.WM_MOUSEFIRST && m.Msg <= Native.WM_MOUSELAST && m.Msg != Native.WM_MOUSEMOVE && Ours())
+                return;
+
             switch (m.Msg)
             {
                 case Native.WM_MOUSEACTIVATE:
@@ -216,6 +244,11 @@ namespace Glass
                 case Native.WM_DPICHANGED:
                     m.Result = IntPtr.Zero;      // sized in physical pixels; nothing to rescale
                     return;
+                case Native.WM_EXITSIZEMOVE:
+                    // A drag just ended: the one time the position is the user's choice. Moves
+                    // Windows makes -- a monitor going to sleep -- are not saved over it.
+                    Saved.OverlayOrigin = Location;
+                    break;
 
                 case Native.WM_LBUTTONDOWN:
                 case Native.WM_LBUTTONDBLCLK:
@@ -253,8 +286,11 @@ namespace Glass
                     m.Result = new IntPtr(1);
                     return;
                 case Native.WM_MOUSEWHEEL:
-                case Native.WM_MOUSEHWHEEL:
                     if (locked) Wheel(m);
+                    return;
+                case Native.WM_MOUSEHWHEEL:
+                    // A tilt sideways. WoW binds no horizontal wheel, and passing it on as a
+                    // vertical notch would fire a bind nobody pressed.
                     return;
             }
             base.WndProc(ref m);
@@ -316,8 +352,16 @@ namespace Glass
             }
         }
 
+        /// After the monitors change: back to where the user last put it if that is on screen
+        /// again, else anywhere it can be reached.
         public void EnsureReachable()
         {
+            var home = Saved.OverlayOrigin;
+            if (home.HasValue && home.Value != Location && Screens.Reachable(new Rectangle(home.Value, Size)))
+            {
+                Location = home.Value;
+                return;
+            }
             if (Screens.Reachable(Bounds)) return;
             var p = Screens.Primary();
             if (p != null) Location = new Point(p.Bounds.X + 100, p.Bounds.Y + 100);

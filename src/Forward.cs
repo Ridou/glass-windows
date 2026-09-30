@@ -173,7 +173,8 @@ namespace Glass
         {
             if (!Native.SystemParametersInfo(Native.SPI_GETMOUSEWHEELROUTING, 0, out uint routing, 0))
                 return true;                           // older than 1703: the pointer, always
-            bool follows = routing != Native.MOUSEWHEEL_ROUTING_FOCUS;
+            // Only 2 follows the pointer; 1 (hybrid) sends a desktop program's wheel to focus.
+            bool follows = routing == Native.MOUSEWHEEL_ROUTING_MOUSE_POS;
             if (!follows && Interlocked.Exchange(ref routingLogged, 1) == 0)
                 Log.Write("\"Scroll inactive windows\" is off, so the wheel is posted to the hovered client instead");
             return follows;
@@ -230,6 +231,24 @@ namespace Glass
                      + "Run Glass as administrator too, or start the game normally.");
         }
 
+        static int clipLogged;
+
+        /// Put the cursor on `p` and confirm it is there. Windows clamps SetCursorPos to any
+        /// ClipCursor rectangle, and WoW's "Lock Cursor to Window" sets one around the client
+        /// you are playing: the cursor would stop at its edge, and the click meant for the
+        /// other character would land on this one. Better refused than delivered there.
+        static bool PinTo(Point p)
+        {
+            Native.SetCursorPos(p.X, p.Y);
+            Native.GetCursorPos(out POINT at);
+            if (at.X == p.X && at.Y == p.Y) return true;
+            if (Interlocked.Exchange(ref clipLogged, 1) == 0)
+                Log.Write("the cursor could not reach " + p.X + "," + p.Y + " (it stopped at " + at.X + "," + at.Y
+                          + "). Is \"Lock Cursor to Window\" on in the game you are playing? Input refused.");
+            System.Media.SystemSounds.Beep.Play();
+            return false;
+        }
+
         static void Send(INPUT input)
         {
             var sent = Native.SendInput(1, new[] { input }, Marshal.SizeOf<INPUT>());
@@ -250,8 +269,9 @@ namespace Glass
         /// There is no Windows equivalent of CGAssociateMouseAndMouseCursorPosition: a client in
         /// mouse-look sees the round trip as two equal and opposite movements. The camera ends
         /// where it started, but can flick for a frame. Post mode avoids the trip entirely.
-        static void WithWarp(Point target, bool expectActivation, Action body)
+        static void WithWarp(Point target, bool expectActivation, Func<bool> body)
         {
+            focusNote = "";
             IntPtr wasFront = Native.GetForegroundWindow();
             IntPtr clicked = expectActivation ? Wnd.At(target) : IntPtr.Zero;
             CheckReachable(expectActivation ? clicked : Wnd.At(target));
@@ -262,9 +282,9 @@ namespace Glass
                 // SetCursorPos rather than an absolute SendInput move: absolute moves are
                 // normalised to 0..65535 across the whole desktop and can land a pixel off, and
                 // a pixel is the difference between two party frames.
-                Native.SetCursorPos(target.X, target.Y);
+                if (!PinTo(target)) { clicked = IntPtr.Zero; return; }
                 Pause(StepMs);
-                body();
+                if (!body()) clicked = IntPtr.Zero;              // nothing was delivered
             }
             finally
             {
@@ -275,57 +295,80 @@ namespace Glass
             }
         }
 
+        /// What the last focus hand-back did, for the click's log line. Worker thread only.
+        static string focusNote = "";
+
+        /// "WowClassic 4812": which client, told apart by process id, since both are WoW.
+        static string Who(IntPtr hWnd)
+        {
+            if (hWnd == IntPtr.Zero) return "nothing";
+            Native.GetWindowThreadProcessId(hWnd, out uint pid);
+            return Wnd.ProcessName(hWnd) + " " + pid;
+        }
+
         static void RestoreFocus(IntPtr wasFront, IntPtr clicked)
         {
-            if (wasFront == IntPtr.Zero || Wnd.IsOurs(wasFront)) return;
+            if (wasFront == IntPtr.Zero) { focusNote = "no window had focus"; return; }
+            if (Wnd.IsOurs(wasFront)) { focusNote = "Glass had focus, so it stays with " + Who(Native.GetForegroundWindow()); return; }
+            var sw = Stopwatch.StartNew();
+            string took = "";
             if (clicked != IntPtr.Zero && clicked != wasFront)
             {
-                // Give the clicked client up to 150ms to take focus, so it cannot do so after
-                // we have already handed focus back.
-                var sw = Stopwatch.StartNew();
-                while (Native.GetForegroundWindow() == wasFront && sw.ElapsedMilliseconds < 150) Thread.Sleep(2);
+                // Give the clicked client time to take focus, so it cannot do so after we have
+                // already handed focus back. It activates when it next pumps its messages: within a
+                // frame usually, but a client hitching on a load can take longer. Returning as soon
+                // as it happens means the wait only costs anything when it is needed.
+                while (Native.GetForegroundWindow() == wasFront && sw.ElapsedMilliseconds < 400) Thread.Sleep(2);
+                took = Native.GetForegroundWindow() == wasFront
+                    ? Who(clicked) + " never took focus (400ms); "
+                    : Who(Native.GetForegroundWindow()) + " took focus in " + sw.ElapsedMilliseconds + "ms; ";
             }
-            if (Native.GetForegroundWindow() == wasFront) return;
+            if (Native.GetForegroundWindow() == wasFront) { focusNote = took + "focus stayed on " + Who(wasFront); return; }
+            var back = Stopwatch.StartNew();
             bool ok = Wnd.FocusAndWait(wasFront, 150, 2);
-            if (!ok)
-            {
-                Log.Write("focus back to " + Wnd.ProcessName(wasFront) + " FAILED");
-                System.Media.SystemSounds.Beep.Play();
-            }
+            focusNote = took + "focus back to " + Who(wasFront) + (ok ? " ok in " + back.ElapsedMilliseconds + "ms"
+                                                                     : " FAILED, now on " + Who(Native.GetForegroundWindow()));
+            if (!ok) System.Media.SystemSounds.Beep.Play();
         }
 
         static void WarpClick(Point global, MouseButtons button)
         {
             var t0 = Stopwatch.StartNew();
             ButtonFlags(Physical(button), out uint down, out uint up, out uint data);
+            bool sent = false;
             WithWarp(global, true, () =>
             {
                 // Re-pin right before each press: Windows has no way to hold the pointer still,
                 // so a hand still moving the mouse would otherwise carry it off the frame during
                 // the pause, and the click would land on whatever it drifted to.
-                Native.SetCursorPos(global.X, global.Y);
+                if (!PinTo(global)) return false;
                 Send(MouseInput(down, data));
                 Pause(StepMs);
-                Native.SetCursorPos(global.X, global.Y);
+                PinTo(global);                                 // the release goes out regardless
                 Send(MouseInput(up, data));
                 Pause(StepMs);
+                return sent = true;
             });
-            Log.Write(string.Format("click {0} at {1},{2} via warp, {3:F0}ms", button, global.X, global.Y,
-                                    t0.Elapsed.TotalMilliseconds));
+            if (!sent) { Log.Write("click " + button + " at " + global.X + "," + global.Y + " refused"); return; }
+            Log.Write(string.Format("click {0} at {1},{2} via warp, {3:F0}ms -> {4}; {5}", button, global.X, global.Y,
+                                    t0.Elapsed.TotalMilliseconds, Who(Wnd.At(global)), focusNote));
         }
 
         static void WarpScroll(Point global, int notches)
         {
             bool follows = WheelFollowsPointer();
+            bool sent = false;
             WithWarp(global, false, () =>
             {
-                Native.SetCursorPos(global.X, global.Y);
+                if (!PinTo(global)) return false;
                 if (follows) Send(MouseInput(Native.MOUSEEVENTF_WHEEL, unchecked((uint)(notches * Native.WHEEL_DELTA))));
                 else PostScroll(global, notches);       // the pointer is there for mouseover binds
                 Pause(StepMs);
+                return sent = true;
             });
+            if (!sent) return;
             Log.Write("wheel " + (notches > 0 ? "up" : "down") + " at " + global.X + "," + global.Y
-                      + (follows ? " via warp" : " via warp and post"));
+                      + (follows ? " via warp" : " via warp and post") + "; " + focusNote);
         }
 
         // MARK: - Post straight at the window
@@ -455,11 +498,11 @@ namespace Glass
             {
                 // Warp so the client knows which frame the pointer is over. A mouseover bind is
                 // only meaningful with the cursor actually there.
-                Native.SetCursorPos(at.X, at.Y);
+                if (!PinTo(at)) { Log.Write("key " + name + " refused"); return; }
                 if (viaPost)
                 {
                     Pause(Math.Max(StepMs, HoverMs));
-                    Native.SetCursorPos(at.X, at.Y);           // re-pin; see WarpClick
+                    if (!PinTo(at)) { Log.Write("key " + name + " refused"); return; }   // re-pin; see WarpClick
                     // Posted messages are read in the order they were posted, but all of them
                     // before any mouse input. A client that has not run since the warp would read
                     // the key before the move and act on whatever it hovered last. A posted move
@@ -484,7 +527,7 @@ namespace Glass
                     }
                     Native.SetCursorPos(at.X, at.Y);           // now active, it re-reads the hover
                     Pause(Math.Max(StepMs, HoverMs));
-                    Native.SetCursorPos(at.X, at.Y);
+                    if (!PinTo(at)) { Log.Write("key " + name + " refused"); return; }
                     Send(KeyInput(vk, false));
                     Pause(StepMs);
                     Send(KeyInput(vk, true));

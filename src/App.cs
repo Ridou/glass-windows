@@ -157,6 +157,14 @@ namespace Glass
                          "Clears all four preset regions, the saved overlay position, and the current selection."))
                 return;
             Saved.Reset();
+            // The live mirror follows the settings it just lost, or Settings would show 1.00x
+            // beside a mirror still drawn at the old size.
+            if (Overlay != null && !Overlay.IsDisposed)
+            {
+                Overlay.SetScale(Saved.Scale);
+                Overlay.SetOpacity(Saved.Opacity ?? 1.0);
+                Overlay.ApplyHeaderMode();
+            }
             Overlay?.Bar?.RefreshBar();
             Settings?.RefreshAll();
             Log.Write("reset: all presets and saved position cleared");
@@ -236,9 +244,11 @@ namespace Glass
 
         static Timer restart;
         static int restartTries;
+        static long restartFrames;
 
-        /// The source went away -- a display reconfigured, usually. Re-resolve against the saved
-        /// rect once a second for up to 30 seconds rather than freezing on the last frame.
+        /// The display being mirrored went away. Re-resolve against the saved rect once a
+        /// second for up to 30 seconds rather than freezing on the last frame. It counts as
+        /// working only once a frame has actually arrived.
         public static void RestartCapture()
         {
             if (restart == null)
@@ -246,17 +256,15 @@ namespace Glass
                 restart = new Timer { Interval = 1000 };
                 restart.Tick += (o, e) =>
                 {
-                    restartTries++;
+                    if (Capture.Frames > restartFrames) { restart.Stop(); Log.Write("capture: restarted"); return; }
+                    if (++restartTries > 30) { restart.Stop(); Log.Write("capture: gave up restarting"); return; }
                     var r = Saved.Region;
-                    if (r.HasValue && Screens.For(r.Value) != null)
-                    {
-                        Begin(r.Value, Saved.ActivePreset);
-                        if (Capture.Running) { restart.Stop(); return; }
-                    }
-                    if (restartTries >= 30) { restart.Stop(); Log.Write("capture: gave up restarting"); }
+                    if (r.HasValue && Screens.For(r.Value) != null && !Capture.Running) Begin(r.Value, Saved.ActivePreset);
                 };
             }
+            if (restart.Enabled) return;
             restartTries = 0;
+            restartFrames = Capture.Frames;
             restart.Start();
         }
 

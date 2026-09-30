@@ -34,9 +34,12 @@ Checks, all runnable from a Mac:
   against the Mac build's Swift. It prints `BYTE-IDENTICAL`.
 - `tools/wine.sh 300 dist/Glass/Glass.exe --selftest 'C:\glass-selftest'` renders every window
   to PNG in a headless Wine prefix and runs the self-checks. It prints `ALL PASSED`.
+- `tools/e2e/run.sh` runs the real Glass.exe against two stand-in game windows. It sends
+  clicks, keys, the wheel and hotkeys, and checks that each input reached exactly one of them,
+  at the right place. It prints `ALL PASSED`.
 - `python3 tools/pe.py dist/Glass/Glass.exe` shows the subsystem, icon, manifest and version.
 
-The self-test covers layout only. Clicks and keys need testing on real Windows with two WoW
-clients running.
+Wine ignores no-activate windows, so the end-to-end test skips its focus checks there. Focus
+handling, and capture on a real GPU, still need a test on Windows with two WoW clients.
 
 [HANDOFF.md](HANDOFF.md) has the design, threading, and Wine setup notes.

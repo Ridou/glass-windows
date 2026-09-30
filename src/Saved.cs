@@ -27,13 +27,31 @@ namespace Glass
 
         public static void Load()
         {
-            try
+            try { Directory.CreateDirectory(Dir); } catch { }
+            if (!File.Exists(Path_)) return;
+            // A virus scanner or a second copy can hold the file for a moment; wait it out
+            // rather than start empty and overwrite every preset at the first save.
+            for (int attempt = 1; ; attempt++)
             {
-                Directory.CreateDirectory(Dir);
-                if (File.Exists(Path_))
+                try
+                {
                     d = JsonNode.Parse(File.ReadAllText(Path_)) as JsonObject ?? new JsonObject();
+                    return;
+                }
+                catch (IOException e) when (attempt < 5)
+                {
+                    Log.Write("settings busy (" + e.Message + "), retrying");
+                    System.Threading.Thread.Sleep(200);
+                }
+                catch (Exception e)
+                {
+                    // Unreadable: keep it beside the new one, so nothing is lost for good.
+                    Log.Write("settings load failed: " + e.Message + " -- kept as settings.bad.json, starting fresh");
+                    try { File.Copy(Path_, System.IO.Path.Combine(Dir, "settings.bad.json"), true); } catch { }
+                    d = new JsonObject();
+                    return;
+                }
             }
-            catch (Exception e) { Log.Write("settings load failed: " + e.Message); d = new JsonObject(); }
         }
 
         /// Writes are debounced and happen on a timer thread, never under `gate`. The keyboard
@@ -55,15 +73,17 @@ namespace Glass
         /// Write now if anything changed. Called by the timer, and on quit.
         public static void FlushNow()
         {
-            string json;
-            lock (gate)
-            {
-                if (!dirty) return;
-                dirty = false;
-                json = d.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
-            }
+            // The snapshot is taken inside the write lock, so an older one can never be written
+            // after a newer one.
             lock (writeGate)
             {
+                string json;
+                lock (gate)
+                {
+                    if (!dirty) return;
+                    dirty = false;
+                    json = d.ToJsonString(new JsonSerializerOptions { WriteIndented = true });
+                }
                 try
                 {
                     Directory.CreateDirectory(Dir);
@@ -73,7 +93,13 @@ namespace Glass
                     // an empty settings file behind.
                     if (File.Exists(Path_)) File.Replace(tmp, Path_, null); else File.Move(tmp, Path_);
                 }
-                catch (Exception e) { Log.Write("settings save failed: " + e.Message); }
+                catch (Exception e)
+                {
+                    // Still unsaved: try again shortly, and again on quit.
+                    Log.Write("settings save failed: " + e.Message);
+                    lock (gate) { dirty = true; }
+                    flushTimer?.Change(2000, System.Threading.Timeout.Infinite);
+                }
             }
         }
 

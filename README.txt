@@ -82,22 +82,43 @@ IF SOMETHING DOESN'T WORK
 
 * Mouseover keys stopped working: use tray menu > Reinstall Keyboard Hook.
 
-* The mouse wheel: in Windows Settings > Mouse, leave "Scroll inactive windows" on. It's
-  on unless you turned it off. Glass copes if it's off, but it's built for it being on.
+* The mouse wheel does nothing over the mirror: in Windows Settings > Mouse, turn "Scroll
+  inactive windows" back on. With it off, Windows sends the wheel to the game you're
+  playing instead of to the mirror.
+
+* A click or key beeps and does nothing: turn off "Lock Cursor to Window" in WoW's
+  options. It stops the pointer leaving the game you're playing, so Glass can't reach the
+  other one, and it refuses rather than click the wrong character.
+
+* Clicks on the mirror do nothing and Glass says the mirror covers what it mirrors: the
+  mirror is sitting on top of the area it shows. Unlock it and drag it somewhere else.
 
 * The mirror and its header don't show up in screenshots, OBS or Discord screen share.
   That's deliberate: it's how Glass keeps itself out of its own mirror.
 
-* To start over, use tray menu > Reset Everything. Or quit Glass and delete
+* Tray menu > Reset Everything clears the presets and the mirror's size, position and
+  opacity. To start completely fresh, quit Glass and delete
   %APPDATA%\Glass\settings.json.
 
-When you report a problem, please send the log with it. It's here, or use tray menu >
-Open Log:
+SENDING A REPORT
+----------------
+If something goes wrong, send a report straight after it happens:
+
+  1. Open Settings (double-click the tray icon) and go to the Help tab.
+  2. Click Copy Report.
+  3. Paste it (Ctrl+V) into Discord or an email. Discord turns a long paste into a file
+     called message.txt. That's fine, just send it.
+
+The Help tab shows the whole report, so you can read what you're sending. It starts with
+a short "What looks wrong" list. It's also saved as Glass-report.txt on your Desktop, and
+the tray menu has Copy Report for Help too.
+
+The report holds Glass's settings, your screen layout, the WoW windows it can see and the
+recent log. It never contains anything you type in the game.
+
+If Glass won't start at all, send this file instead:
 
   %LOCALAPPDATA%\Glass\Glass.log
-
-It records what Glass did and how long each step took. It never records the keys you
-press away from the mirror.
 
 To quit, use tray menu > Quit Glass. For command-line options, run Glass.exe --help from
 a Command Prompt.

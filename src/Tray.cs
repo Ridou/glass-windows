@@ -104,6 +104,11 @@ namespace Glass
             items.Add(opacity);
 
             items.Add(new ToolStripSeparator());
+            items.Add(Item("Copy Report for Help", null, () =>
+            {
+                var said = Report.CopyAndSave();
+                Balloon("Glass report", said);
+            }));
             items.Add(Item("Open Log", null, OpenLog));
             items.Add(Item("Reinstall Keyboard Hook", null, () => { Hooks.Reinstall(); Log.Write("keyboard hook reinstall requested"); }));
             items.Add(Item("Reset Everything…", null, App.ResetEverything));

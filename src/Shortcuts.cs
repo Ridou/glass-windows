@@ -224,6 +224,7 @@ namespace Glass
             bound.Clear();
             if (suspended) return;
 
+            var taken = new List<string>();
             foreach (var c in Commands.All)
             {
                 var s = Saved.GetShortcut(c);
@@ -232,10 +233,25 @@ namespace Glass
                 if (Native.RegisterHotKey(Handle, id, s.Mods | Native.MOD_NOREPEAT, (uint)s.KeyCode))
                     bound[id] = c;
                 else
+                {
                     Log.Write("could not register " + s.Display + " for " + Commands.Label(c)
                               + " -- another app owns it");
+                    taken.Add(s.Display);
+                }
             }
+            // Settings would still show these as if they worked. Say so, once per set.
+            var key = string.Join(", ", taken);
+            if (taken.Count > 0 && key != lastTaken)
+                App.Warn("Some Glass shortcuts are taken",
+                         key + (taken.Count == 1 ? " is" : " are") + " already used by another program. "
+                         + "Pick others in Settings > Shortcuts.");
+            lastTaken = key;
         }
+
+        string lastTaken = "";
+
+        /// Shortcuts another program owns, for the help report. Empty if all registered.
+        public string Taken => lastTaken;
 
         /// While a new shortcut is being recorded, the old ones must not fire: pressing
         /// Ctrl+Alt+1 to record it would otherwise switch preset instead.

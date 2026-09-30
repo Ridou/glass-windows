@@ -32,17 +32,21 @@ namespace Glass
         public int Width { get; private set; }
         public int Height { get; private set; }
         public bool Running { get; private set; }
+        /// Frames captured since launch. A restart counts as working once this moves.
+        public long Frames => Interlocked.Read(ref frames);
+        long frames;
 
         /// Raised after each frame lands, on the capture thread.
         public Action OnFrame;
-        /// Raised when capture has failed enough times to count as gone -- a display
-        /// reconfigured, usually. The owner restarts rather than freezing on the last frame.
+        /// Raised when the display being captured has gone. The owner re-resolves the region
+        /// rather than freezing on the last frame.
         public Action OnDrop;
 
         IntPtr screenDC, dib, oldBitmap;
         Rectangle source;
         Timer timer;
         int failures;
+        int busy;
         bool loggedFormat;
 
         public void Start(Rectangle rect, double fps)
@@ -89,6 +93,14 @@ namespace Glass
 
         void Tick()
         {
+            // A tick that overruns the period would otherwise run alongside the next one.
+            if (Interlocked.Exchange(ref busy, 1) == 1) return;
+            try { TickOnce(); }
+            finally { Volatile.Write(ref busy, 0); }
+        }
+
+        void TickOnce()
+        {
             if (!Running) return;
             bool ok;
             lock (Gate)
@@ -106,21 +118,34 @@ namespace Glass
                     loggedFormat = true;
                     Log.Write("capture format BGRA32 top-down, " + Width + "x" + Height);
                 }
+                if (failures >= 30) Log.Write("capture: working again after " + failures + " failed reads");
                 failures = 0;
+                Interlocked.Increment(ref frames);
                 var f = OnFrame;
                 if (f != null) { try { f(); } catch { } }
                 return;
             }
 
             // A failed blit on its own means nothing -- a mode switch or a UAC prompt will do
-            // it. A run of them means the source is gone.
+            // it. The lock screen does it for as long as the PC stays locked, so a run of them
+            // is retried quietly, with a fresh desktop DC every couple of seconds in case the old
+            // one died with a display change. Only a display that has gone ends the capture.
             if (++failures == 1) Log.Write("capture: BitBlt failed");
-            if (failures >= 30)
+            if (failures % 30 != 0) return;
+            if (failures == 30) Log.Write("capture: the screen cannot be read (locked, or a UAC prompt?) -- still trying");
+            if (Screens.For(source) == null)
             {
-                Log.Write("capture: gave up after " + failures + " failed blits");
+                Log.Write("capture: the display it was reading has gone");
                 var d = OnDrop;
                 Stop();
                 if (d != null) { try { d(); } catch { } }
+                return;
+            }
+            lock (Gate)
+            {
+                if (!Running || screenDC == IntPtr.Zero) return;
+                Native.ReleaseDC(IntPtr.Zero, screenDC);
+                screenDC = Native.GetDC(IntPtr.Zero);
             }
         }
 

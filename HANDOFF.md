@@ -1,4 +1,4 @@
-# Glass for Windows — handoff (2026-09-30, session 3)
+# Glass for Windows — handoff (2026-09-30, session 4)
 
 The user asked for a Windows `.exe` of Glass, zipped to share with a friend. It should have **all
 features exactly as on the Mac**, built from this Mac without live Windows testing. They work in
@@ -25,9 +25,11 @@ GitHub, and the old copy is deleted.
 | 8 | Zip plus ignore rules | ✅ session 3 | `dist/Glass-Windows.zip`, 60 MB: `Glass/Glass.exe`, `Glass/README.txt`. Ignore rules in `.gitignore` |
 | 9 | Final self-review | ✅ session 3 | P/Invoke layouts, thread affinity, exit flushing; 2 small fixes |
 | 10 | Move to `Ridou/glass-windows` | ✅ session 3 | First commit pushed to `main`; the old copy in the Mac repo is removed |
-| 11 | Live test on real Windows | ⏳ the friend | Needs Windows and two WoW clients. Ask for `Glass.log` back |
+| 11 | Second review + end-to-end test | ✅ session 4 | Two independent reviews; 13 fixes; `tools/e2e/run.sh`: 46 ok, 0 failed, 4 skipped (focus; Wine can't judge it) |
+| 12 | Help report for remote diagnosis | ✅ session 4 | Settings > Help > Copy Report; tray item; `--report`; e2e checks it |
+| 13 | Live test on real Windows | ⏳ the friend | Needs Windows and two WoW clients. Ask for `Glass.log` back |
 
-Zip SHA-256 of the exe inside: `156b5c42a0cd4d047071a6538e4eef5cbd814029bec0f271dfddf12e3fa041d5`.
+Zip SHA-256 of the exe inside: `f0a3c330b6ea0e6c35c77bfe6230686d43ec2232e1deaf0c46c159f238056290` (session 4, with the Help tab).
 If you change any source, republish and rezip; the zip is only as fresh as its last build.
 
 ## Next
@@ -40,7 +42,88 @@ If you change any source, republish and rezip; the zip is only as fresh as its l
      `--selftest` doesn't cover.
    - The null driver means nothing can appear on the Mac. The standing rule is still to ask
      before launching the full GUI.
-3. The friend's live test on real Windows (milestone 11). Ask for `Glass.log` back.
+3. The friend's live test on real Windows (milestone 13). Ask for a **report** back (Settings >
+   Help > Copy Report, pasted into Discord, where it arrives as message.txt). What Wine
+   could not prove, so watch for it in the log:
+   - focus handed back to the played client after a click (`focus back ... FAILED`, or
+     `had not taken focus after 400ms`);
+   - capture on a real GPU: that frames arrive (`capture format BGRA32`), and that the mirror
+     leaves itself out (`could not exclude` must not appear);
+   - mixed DPI across two monitors, and the wheel with "Scroll inactive windows" on.
+
+## What session 4 did (milestone 11)
+
+The user asked to "review again and validate it all works perfect" before offering it.
+
+- **Two independent read-only reviews** (input path; lifecycle and UI). What was fixed:
+  1. **Click loop.** If the mirror sat on its own region, a forwarded click landed back on the
+     mirror and forwarded again, forever. The first run opens it at 100,100, where party frames
+     are on one monitor. Fix: the overlay and layered windows drop input tagged `GLSS`
+     (`GetMessageExtraInfo`), and `OverlayForm.Covers` refuses a click whose target is under
+     the mirror or header, with one tray warning.
+  2. **Held key crossing the overlay edge.** Its repeats went to whoever the pointer was over
+     now and the key-up was swallowed: a spell on the wrong character and a stuck key. Fix: a
+     keypress belongs to whoever got its down (`Hooks.swallowed` / `passed`).
+  3. **Cursor clipped** (WoW "Lock Cursor to Window"). `SetCursorPos` stopped at the played
+     client's edge and the click landed there. Fix: `Forward.PinTo` confirms the cursor
+     arrived; otherwise it refuses, logs and beeps. The README says what to turn off.
+  4. Focus restore waits up to 400 ms (was 150) for the clicked client to activate.
+  5. `ShowWindowAsync` and `SetWindowPos(...ASYNCWINDOWPOS)` replace `ShowWindow` and
+     `BringWindowToTop`, which wait on the target's thread.
+  6. `Wnd.IsOrdinary` skips layered and transparent (click-through) windows, such as GPU
+     overlays.
+  7. The number row is matched by scan code 0x02-0x0D, as the Mac does, with the VK as the
+     fallback when the scan code is 0. The sideways wheel tilt (`WM_MOUSEHWHEEL`) is
+     ignored.
+  8. **Wheel routing:** only `MOUSE_POS` (2) follows the pointer. With "Scroll inactive windows"
+     off, the overlay never receives the wheel at all, so the README now says to keep it on
+     (it used to say "Glass copes").
+  9. The position is saved only on `WM_EXITSIZEMOVE` (a user drag). A monitor sleeping no
+     longer overwrites it, and `EnsureReachable` returns home when the monitor does.
+  10. **Capture:** failed reads (lock screen, UAC) retry quietly with a fresh desktop DC every
+      30 failures. `OnDrop` fires only if the display is gone. A restart counts as working only
+      once `Capture.Frames` advances. This was an endless restart loop that grew the log.
+  11. **Settings:** a failed save is retried. A busy file on load is retried five times. An
+      unreadable one is kept as `settings.bad.json`. The snapshot is taken inside the write
+      lock.
+  12. `--reset/--role/--scale/--bar/--no-bar` are refused while Glass runs (they were silently
+      overwritten). Hotkeys that fail to register show a tray warning. Reset Everything
+      updates the live mirror.
+  13. Deliberate exits log `stopped:`; `fatal:` is kept for crashes.
+- **Help report (`src/Report.cs`), asked for by the user so the friend can send diagnostics
+  over Discord.**
+  - Settings has a new **Help** tab (5th; `TabNames` gained "Help"). Copy Report puts the report
+    on the clipboard and in `Desktop\Glass-report.txt`. The tab also shows the full report text,
+    so the friend can read what they send. Show Report File selects the file in Explorer, and
+    Open Log Folder is there too. The tray has "Copy Report for Help", and `Glass.exe --report`
+    covers the case where Glass won't run.
+  - Contents:
+    - A plain-English **"What looks wrong"** summary drawn from the live state and log patterns.
+    - Versions, Windows build, elevation.
+    - Displays and DPI.
+    - Wheel routing, swapped buttons, keyboard layout.
+    - Every WoW window: pid, rect, display, elevated, focus.
+    - Glass's live state: mirror, capture frames, hook, modes, taken shortcuts.
+    - `settings.json` verbatim, and the last 400 log lines (topped up from `Glass.old.log`).
+  - Every warp click's log line now ends with a focus trace, for example `-> WowClassic 4812;
+    WowClassic 4812 took focus in 12ms; focus back to WowClassic 5120 ok in 3ms`. Focus is the
+    main thing Wine couldn't prove, so read this first in the friend's report.
+- **Not changed, noted:**
+  - Posted-message coordinates assume WoW is per-monitor DPI aware.
+  - `WaitForRelease` waits for any press of that button.
+  - Launching from a console ties Glass to that console.
+  - The rounded corners (6 px) let a click on the very corner pixel reach the game underneath.
+    The Mac is the same.
+- **`tools/e2e/`** (new): `run.sh` publishes `E2E.exe` and drives the real
+  `dist/Glass/Glass.exe` in the headless prefix.
+  - Two stand-in clients, "Priest" (mirrored) and "Warrior" (played, under the overlay), log
+    every input they receive.
+  - It covers the click mapping, modifiers, corners, keys (posted move first; modifiers; held;
+    edge crossing; non-row keys), the wheel, unlocked drag, hotkeys L and H, the cursor clip,
+    the mirror over its own region, position saving, second launch, and `--reset` refused.
+  - A control window proves Wine ignores `WS_EX_NOACTIVATE`, so focus checks print `skip`
+    there. **On real Windows they count.**
+  - Wine quirk: tray balloons appear top-left, over the Priest. The driver waits them out.
 
 ## What session 3 did (milestones 6–9)
 
@@ -121,6 +204,7 @@ rm -rf dist && dotnet publish -c Release -o dist/Glass    # Glass.exe + README.t
 python3 tools/pe.py dist/Glass/Glass.exe
 ./tools/wowdiff/run.sh                            # BYTE-IDENTICAL
 tools/wine.sh 300 dist/Glass/Glass.exe --selftest 'C:\glass-selftest'   # ALL PASSED
+./tools/e2e/run.sh                                # ALL PASSED (focus checks skip under Wine)
 cd dist && rm -f Glass-Windows.zip && zip -r -X -q Glass-Windows.zip Glass
 ```
 
@@ -157,8 +241,9 @@ cd dist && rm -f Glass-Windows.zip && zip -r -X -q Glass-Windows.zip Glass
 - **Clicks:** handled in `OverlayForm.WndProc`.
   - The job waits for the physical button to be released (checking `SM_SWAPBUTTON`), then calls
     `SetCursorPos`.
-  - It re-pins the cursor before each `SendInput` down and up, which are tagged `GLSS`.
-  - It then settles, warps back, and restores focus. Restore waits up to 150 ms for the clicked
+  - It re-pins the cursor before each `SendInput` down and up, which are tagged `GLSS`. Each
+    pin is checked (`PinTo`), and a clipped cursor refuses the input.
+  - It then settles, warps back, and restores focus. Restore waits up to 400 ms for the clicked
     client to take focus first.
   - Focus is taken with `AttachThreadInput` on the worker's own thread.
 - **Keys:** the hook claims the number row while the pointer is over a visible, locked overlay.
@@ -214,6 +299,7 @@ cd dist && rm -f Glass-Windows.zip && zip -r -X -q Glass-Windows.zip Glass
   - A warning when a target runs as administrator.
   - Log rotation.
   - A second launch with `--settings TAB` opens that tab.
+  - A Help tab and help report (Copy Report, tray item, `--report`) for remote diagnosis.
   - The header drops below the overlay if there's no room above it.
   - WoW setting details are shown under each checkbox.
   - The text is worded for any player rather than "Warrior/Priest".
@@ -239,10 +325,11 @@ cd dist && rm -f Glass-Windows.zip && zip -r -X -q Glass-Windows.zip Glass
   font).
 - Windows: `src/Picker.cs`, `Header.cs`, `Overlay.cs`, `GpuBoost.cs`, `Tray.cs`,
   `SettingsForm.cs` (which includes `OneLineLabel`).
-- `src/App.cs`, `src/Program.cs`, `src/SelfTest.cs` (which includes `Render` and `Layout`).
+- `src/App.cs`, `src/Program.cs`, `src/SelfTest.cs` (which includes `Render` and `Layout`),
+  `src/Report.cs` (the help report).
 - `addon/`: Core.lua and GlassSetup.toc, from glass.swift.
 - `README.md`: the repo's front page.
 - `README.txt`: for the friend. It is ASCII with CRLF line endings; keep it that way (after an
   edit, run `perl -pi -e 's/\r?\n/\r\n/' README.txt`).
-- `tools/`: `wine.sh`, `pe.py`, `wowdiff/`.
+- `tools/`: `wine.sh`, `pe.py`, `wowdiff/`, `e2e/`.
 - `Glass.csproj`, `app.manifest`, `Glass.ico`, `makeicon-win.swift`, `.gitignore`.

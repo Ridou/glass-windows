@@ -187,6 +187,8 @@ namespace Glass
         public const uint SWP_NOACTIVATE = 0x0010;
         public const uint SWP_SHOWWINDOW = 0x0040;
         public const uint SWP_NOOWNERZORDER = 0x0200;
+        public const uint SWP_ASYNCWINDOWPOS = 0x4000;
+        public static readonly IntPtr HWND_TOP = IntPtr.Zero;
         public static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
         public static readonly IntPtr HWND_MESSAGE = new IntPtr(-3);
 
@@ -213,6 +215,9 @@ namespace Glass
         public const int WM_XBUTTONUP = 0x020C;
         public const int WM_XBUTTONDBLCLK = 0x020D;
         public const int WM_MOUSEHWHEEL = 0x020E;
+        public const int WM_MOUSEFIRST = 0x0200;
+        public const int WM_MOUSELAST = 0x020E;
+        public const int WM_EXITSIZEMOVE = 0x0232;
         public const int WM_KEYDOWN = 0x0100;
         public const int WM_KEYUP = 0x0101;
         public const int WM_SYSKEYDOWN = 0x0104;
@@ -264,6 +269,7 @@ namespace Glass
         // MARK: - Hooks, raw input and hotkeys
 
         public const int WH_KEYBOARD_LL = 13;
+        public const uint LLKHF_EXTENDED = 0x01;
         public const uint LLKHF_INJECTED = 0x10;
 
         public const uint RIDEV_INPUTSINK = 0x00000100;
@@ -332,6 +338,11 @@ namespace Glass
         [DllImport("user32.dll")] public static extern bool AllowSetForegroundWindow(int pid);
         [DllImport("user32.dll")] public static extern bool BringWindowToTop(IntPtr hWnd);
         [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int cmd);
+        /// Never waits on the window's thread, unlike ShowWindow on another process's window.
+        [DllImport("user32.dll")] public static extern bool ShowWindowAsync(IntPtr hWnd, int cmd);
+        /// The dwExtraInfo of the input behind the message being handled: how Glass recognises
+        /// its own synthesized clicks arriving back at its own windows.
+        [DllImport("user32.dll")] public static extern IntPtr GetMessageExtraInfo();
         [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr hWnd);
         [DllImport("user32.dll")] public static extern bool IsWindow(IntPtr hWnd);
         [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr hWnd);
@@ -406,6 +417,7 @@ namespace Glass
         /// the pointer (the default, "Scroll inactive windows when I hover over them").
         public const uint SPI_GETMOUSEWHEELROUTING = 0x201C;
         public const uint MOUSEWHEEL_ROUTING_FOCUS = 0;
+        public const uint MOUSEWHEEL_ROUTING_MOUSE_POS = 2;
 
         // MARK: - gdi32
 

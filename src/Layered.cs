@@ -148,6 +148,10 @@ namespace Glass
             // must not resize anything behind our back.
             if (m.Msg == Native.WM_DPICHANGED) { m.Result = IntPtr.Zero; return; }
             if (m.Msg == Native.WM_MOUSEACTIVATE && NoActivate) { m.Result = new IntPtr(Native.MA_NOACTIVATE); return; }
+            // A click Glass synthesized, landing on its own header: the mirror placed over the
+            // region it mirrors. It must not press a preset nobody chose.
+            if (m.Msg > Native.WM_MOUSEMOVE && m.Msg <= Native.WM_MOUSELAST
+                && Native.GetMessageExtraInfo() == Forward.GlassTag) return;
             base.WndProc(ref m);
         }
 

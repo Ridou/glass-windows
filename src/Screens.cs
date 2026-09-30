@@ -163,6 +163,10 @@ namespace Glass
             if (IsOurs(hWnd) || Cloaked(hWnd)) return false;
             int ex = Native.GetWindowLong(hWnd, Native.GWL_EXSTYLE);
             if ((ex & Native.WS_EX_TOOLWINDOW) != 0) return false;
+            // Layered and transparent means click-through: a GPU or chat overlay spread over the
+            // game. A real click there lands on the game, so input must too.
+            const int clickThrough = Native.WS_EX_LAYERED | Native.WS_EX_TRANSPARENT;
+            if ((ex & clickThrough) == clickThrough) return false;
             return Title(hWnd).Length > 0;
         }
 
@@ -231,7 +235,9 @@ namespace Glass
         {
             if (hWnd == IntPtr.Zero || !Native.IsWindow(hWnd)) return false;
             if (Native.GetForegroundWindow() == hWnd) return true;
-            if (Native.IsIconic(hWnd)) Native.ShowWindow(hWnd, Native.SW_RESTORE);
+            // The Async forms: the plain ones wait on the window's own thread, and a client in a
+            // loading screen would hold up every click and key queued behind this.
+            if (Native.IsIconic(hWnd)) Native.ShowWindowAsync(hWnd, Native.SW_RESTORE);
             if (Native.SetForegroundWindow(hWnd) && Native.GetForegroundWindow() == hWnd) return true;
 
             uint self = Native.GetCurrentThreadId();
@@ -240,7 +246,8 @@ namespace Glass
             try
             {
                 if (front != 0 && front != self) attached = Native.AttachThreadInput(self, front, true);
-                Native.BringWindowToTop(hWnd);
+                Native.SetWindowPos(hWnd, Native.HWND_TOP, 0, 0, 0, 0,
+                                    Native.SWP_NOMOVE | Native.SWP_NOSIZE | Native.SWP_ASYNCWINDOWPOS);
                 Native.SetForegroundWindow(hWnd);
             }
             catch (Exception e) { Log.Write("focus failed: " + e.Message); }

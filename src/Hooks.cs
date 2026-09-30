@@ -60,6 +60,12 @@ namespace Glass
         /// are playing never sees half a keypress. Only the hook thread touches this.
         static readonly HashSet<int> swallowed = new HashSet<int>();
 
+        /// Keys let through to the game on key-down. A keypress belongs to whoever got its
+        /// down, for as long as it is held: without this, a held key whose pointer drifts onto
+        /// the overlay would have its repeats forwarded and its key-up swallowed, leaving the
+        /// game with a key stuck down. Only the hook thread touches this.
+        static readonly HashSet<int> passed = new HashSet<int>();
+
         const int WM_APP_PING = Native.WM_APP + 1;
         const int WM_APP_REHOOK = Native.WM_APP + 2;
 
@@ -151,6 +157,7 @@ namespace Glass
             Native.UnhookWindowsHookEx(hook);
             hook = IntPtr.Zero;
             swallowed.Clear();
+            passed.Clear();
         }
 
         static IntPtr Callback(int nCode, IntPtr wParam, IntPtr lParam)
@@ -168,7 +175,7 @@ namespace Glass
                 {
                     int msg = wParam.ToInt32();
                     bool isUp = msg == Native.WM_KEYUP || msg == Native.WM_SYSKEYUP;
-                    claimed = Claim((int)k.vkCode, isUp);
+                    claimed = Claim((int)k.vkCode, NumberRow(k), isUp);
                 }
             }
             catch (Exception e) { Log.Write("hook: " + e.Message); }
@@ -184,13 +191,42 @@ namespace Glass
 
         static string lastRefusal;
 
+        /// The twelve keys of the number row, by where they sit rather than what they type, as
+        /// the Mac build matches them: on a German or French layout the last two keys of the row
+        /// are not VK_OEM_MINUS and VK_OEM_PLUS. Scan codes 0x02-0x0D are 1 through =. Input
+        /// injected with no scan code (some mouse software does that) falls back to the key code.
+        static bool NumberRow(KBDLLHOOKSTRUCT k)
+        {
+            if (k.scanCode == 0) return Forwarded.Contains((int)k.vkCode);
+            return k.scanCode >= 0x02 && k.scanCode <= 0x0D && (k.flags & Native.LLKHF_EXTENDED) == 0;
+        }
+
         /// Decide whether a key belongs to the hovered frame. Only ever true while the pointer is
         /// over a visible, locked overlay -- everywhere else the number row is yours.
-        static bool Claim(int vk, bool isUp)
+        static bool Claim(int vk, bool numberRow, bool isUp)
         {
-            if (isUp) return swallowed.Remove(vk);
-            if (!Forwarded.Contains(vk)) return false;
+            if (isUp)
+            {
+                passed.Remove(vk);
+                return swallowed.Remove(vk);
+            }
+            if (!numberRow) return false;
 
+            // Repeats of a held key go wherever its first press went, wherever the pointer is now.
+            if (swallowed.Contains(vk)) return true;
+            if (passed.Contains(vk)) return false;
+
+            bool claim = Decide(vk, out var source, out uint mods, out bool viaPost);
+            if (!claim) { passed.Add(vk); return false; }
+            swallowed.Add(vk);
+            if (source.HasValue) Forward.Key(vk, source.Value, mods, viaPost);
+            return true;
+        }
+
+        /// The first press of a number-row key: the hovered frame's, or yours.
+        static bool Decide(int vk, out Point? source, out uint mods, out bool viaPost)
+        {
+            source = null; mods = 0; viaPost = false;
             var s = State;
             if (s == null || s.Picking || s.Overlay.Width <= 0) return false;
 
@@ -206,17 +242,14 @@ namespace Glass
             lastRefusal = null;
 
             // Glass's own shortcuts (Ctrl+Alt+1 and friends) win over forwarding.
-            uint mods = Shortcut.LiveMods();
+            mods = Shortcut.LiveMods();
             foreach (var sc in s.Shortcuts)
                 if (sc.KeyCode == vk && (sc.Mods & 0xF) == mods) return false;
 
-            // A held key would otherwise repeat the whole warp many times a second. Swallow the
-            // repeats and forward the first press only.
-            if (!swallowed.Add(vk)) return true;
-
-            var source = s.SourcePoint(pointer);
-            if (!source.HasValue) return true;
-            Forward.Key(vk, source.Value, mods, s.KeysViaPost);
+            // Claimed from here on. A held key's repeats are swallowed by Claim, so the whole
+            // warp runs once per press, not many times a second.
+            source = s.SourcePoint(pointer);
+            viaPost = s.KeysViaPost;
             return true;
         }
 

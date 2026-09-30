@@ -13,13 +13,14 @@ namespace Glass
 {
     public sealed class SettingsForm : Form
     {
-        public static readonly string[] TabNames = { "Regions", "Overlay", "Shortcuts", "WoW" };
+        public static readonly string[] TabNames = { "Regions", "Overlay", "Shortcuts", "WoW", "Help" };
 
         readonly TabControl tabs = new TabControl { Dock = DockStyle.Fill };
         readonly TabPage regionsPage = new TabPage("Regions");
         readonly TabPage overlayPage = new TabPage("Overlay") { AutoScroll = true };
         readonly TabPage shortcutsPage = new TabPage("Shortcuts");
         readonly TabPage wowPage = new TabPage("WoW");
+        readonly TabPage helpPage = new TabPage("Help");
         readonly ToolTip tips = new ToolTip { AutoPopDelay = 20000 };
 
         readonly Dictionary<string, Label> presetLabels = new Dictionary<string, Label>();
@@ -52,14 +53,19 @@ namespace Glass
             KeyPreview = true;
             Font = new Font("Segoe UI", 9F);
 
-            tabs.TabPages.AddRange(new[] { regionsPage, overlayPage, shortcutsPage, wowPage });
-            tabs.Selected += (o, e) => { if (e.TabPage == wowPage) EnsureWow(); };
+            tabs.TabPages.AddRange(new[] { regionsPage, overlayPage, shortcutsPage, wowPage, helpPage });
+            tabs.Selected += (o, e) =>
+            {
+                if (e.TabPage == wowPage) EnsureWow();
+                if (e.TabPage == helpPage) ShowReport();
+            };
             Controls.Add(tabs);
 
             BuildRegions();
             BuildOverlay();
             BuildShortcuts();
             BuildWoWFrame();
+            BuildHelp();
             ResumeLayout(false);
             PerformLayout();
         }
@@ -85,6 +91,7 @@ namespace Glass
             TopMost = false;
             Activate();
             if (tabs.SelectedTab == wowPage) EnsureWow();
+            if (tabs.SelectedTab == helpPage) ShowReport();
         }
 
         protected override void OnFormClosing(FormClosingEventArgs e)
@@ -626,6 +633,56 @@ namespace Glass
                    + "Each fits WoW's 255-character macro limit.");
         }
 
+        // MARK: - Help tab
+
+        TextBox reportBox;
+        Label helpStatus;
+
+        /// One button that gathers everything needed to diagnose a problem from afar, shown here
+        /// in full so the person sending it can read what they are sending.
+        void BuildHelp()
+        {
+            var v = helpPage;
+            Text_(v, "Something not working? Send a report.", 16, 12, W - 32, 22, true, 10.5f);
+            Text_(v, "1. Make the problem happen (or right after it did).\n"
+                     + "2. Click Copy Report.\n"
+                     + "3. Paste it (Ctrl+V) into Discord or an email to whoever is helping you. Discord turns a long "
+                     + "paste into a file called message.txt -- that's fine, just send it.",
+                  16, 38, W - 32, 64, false, 9f, Secondary);
+
+            Btn(v, "Copy Report", 16, 108, 150, () =>
+            {
+                helpStatus.Text = Report.CopyAndSave();
+                ShowReport();
+            }, 32);
+            Btn(v, "Show Report File", 176, 108, 150, Report.ShowFile, 32);
+            Btn(v, "Open Log Folder", 336, 108, 150, () =>
+            {
+                try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(Log.Dir) { UseShellExecute = true }); }
+                catch (Exception e) { Log.Write("open log folder: " + e.Message); }
+            }, 32);
+            helpStatus = Text_(v, "The report holds Glass's settings, your screen layout, the WoW windows it can see and the "
+                                  + "recent log. Nothing you type in the game is ever recorded.",
+                               16, 148, W - 32, 34, false, 8.5f, Tertiary);
+
+            reportBox = new TextBox
+            {
+                Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Both, WordWrap = false,
+                Font = new Font("Consolas", 8.5f), Location = new Point(16, 186), Size = new Size(W - 16, 420),
+                BackColor = SystemColors.Window,
+            };
+            v.Controls.Add(reportBox);
+        }
+
+        /// What Copy Report would send right now, readable before it is sent.
+        void ShowReport()
+        {
+            if (reportBox == null) return;
+            try { reportBox.Text = Report.Build(); }
+            catch (Exception e) { reportBox.Text = "Could not build the report: " + e.Message; }
+            reportBox.Select(0, 0);
+        }
+
         // MARK: - Refresh
 
         public void RefreshAll()
@@ -694,6 +751,7 @@ namespace Glass
             {
                 tabs.SelectedTab = page;
                 if (page == wowPage) EnsureWow();
+                if (page == helpPage) ShowReport();
                 var roles = page == wowPage ? new WoWRole?[] { null, WoWRole.Tank, WoWRole.Healer, WoWRole.DPS } : new WoWRole?[] { null };
                 foreach (var role in roles)
                 {

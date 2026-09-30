@@ -41,6 +41,7 @@ namespace Glass
     --install-addon     install/update the GlassSetup WoW addon, then exit
     --role NAME-REALM=tank|healer|dps   assign a character's role, then exit
     --list              list monitors, windows and presets, then exit
+    --report            copy a help report and save it to the Desktop, then exit
     --reset             forget all presets and saved position
     --pid               route clicks with PostMessage instead of warping the cursor
 
@@ -82,7 +83,7 @@ namespace Glass
         /// said in a window or it is said to nobody.
         static void Die(string message)
         {
-            Log.Write("fatal: " + message);
+            Log.Write("stopped: " + message);
             try { Console.Error.WriteLine(message); } catch { }
             if (!haveConsole) MessageBox.Show(message, "Glass", MessageBoxButtons.OK, MessageBoxIcon.Warning);
             Saved.FlushNow();
@@ -136,6 +137,13 @@ namespace Glass
 
             // MARK: Options
 
+            // These change saved settings. A running copy holds its own and would write over
+            // them at its next save, so say so rather than appear to work.
+            var persistent = new[] { "--reset", "--role", "--scale", "--bar", "--no-bar" }.Where(Has).ToList();
+            if (persistent.Count > 0 && Native.FindWindow(null, Hotkeys.Caption) != IntPtr.Zero)
+                Die("Glass is already running, so " + string.Join(", ", persistent)
+                    + " would be overwritten. Quit it from its tray icon first, then run this again.");
+
             var scaleArg = Number(Arg("--scale"));
             if (scaleArg.HasValue) Saved.Scale = scaleArg.Value;
             App.Fps = Math.Max(1, Number(Arg("--fps")) ?? 15);
@@ -183,6 +191,9 @@ namespace Glass
                 foreach (var f in failed) Say("failed: " + f);
                 return failed.Count == 0 ? 0 : 1;
             }
+
+            // For when Glass will not run properly: the same report the Help tab makes.
+            if (Has("--report")) { Say(Report.CopyAndSave()); Say(Report.FilePath); return 0; }
 
             if (Has("--list")) { List(); return 0; }
 
