@@ -35,16 +35,27 @@ If you change any source, republish and rezip; the zip is only as fresh as its l
 
 ## Next
 
-1. **Releases.** The friend downloads from
-   `https://github.com/Ridou/glass-windows/releases/latest/download/Glass-Windows.zip`, linked
-   from `README.md`. `README.txt` in the zip points at the Releases page for updates. v1.0.0 was
-   published in session 4; v1.1.0 (window mode) is built. To ship an update (ask first, since it's public):
-   ```sh
-   rm -rf dist && dotnet publish -c Release -o dist/Glass && (cd dist && zip -r -X -q Glass-Windows.zip Glass)
-   gh release create vX.Y.Z dist/Glass-Windows.zip -R Ridou/glass-windows --title "Glass for Windows X.Y.Z" --notes "..."
-   ```
-   Keep the asset name `Glass-Windows.zip`, or the "latest" link breaks. Bump `<Version>` in
-   `Glass.csproj` too.
+1. **Releases are built by GitHub Actions** (`.github/workflows/release.yml`) and published only
+   if the self-test passes. Steps:
+   1. Bump `<Version>` and `<FileVersion>` in `Glass.csproj` and the version in `app.manifest`.
+   2. Commit and push, then:
+      ```sh
+      git tag -a vX.Y.Z -m "What changed (these become the release notes)"
+      git push origin vX.Y.Z
+      ```
+   3. The workflow checks that the tag matches `<Version>`, builds on `windows-latest`, runs
+      `--selftest`, tries the e2e on real Windows (informational), then publishes the release
+      with `Glass-Windows.zip`. Test output is attached as a workflow artifact. Ask the user
+      before tagging, since the repo is public.
+
+   Other ways to run and check it:
+   - **Without releasing:** `gh workflow run Release -R Ridou/glass-windows`, then `gh run watch`.
+   - **Download link:** `README.md`'s big badge goes to `releases/latest/download/Glass-Windows.zip`.
+     The name `Glass-Windows.zip` must never change.
+   - **Update check:** Glass reads `api.github.com/…/releases/latest` 5 s after starting
+     (`Updates.cs`) and shows a balloon if newer. Settings > Help shows the version, with
+     Check for Updates and Download the Latest. The e2e passes `--no-update-check`.
+   - v1.0.0 to v1.2.0 were uploaded by hand from this Mac; later releases come from the workflow.
 2. **Optional, only with the user's OK:** a headless run of the *full app*, for example
    `tools/wine.sh 30 dist/Glass/Glass.exe --region 0,0,320,200`, then read `Glass.log`.
    - It would exercise startup, capture, the overlay, the tray and the hotkeys, which

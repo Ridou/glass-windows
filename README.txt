@@ -9,6 +9,8 @@ It is built for playing two WoW characters at once by hand. Each click or key yo
 does one thing on one character. Glass never broadcasts, repeats or automates input.
 
 Newest version: https://github.com/Ridou/glass-windows/releases/latest
+Glass tells you when a newer version is out. Settings > Help > Download the Latest gets
+it. To update, quit Glass and replace this folder with the new one; settings are kept.
 
 
 BEFORE YOU START

@@ -1,8 +1,16 @@
 # Glass for Windows
 
+<p align="center">
+  <a href="https://github.com/Ridou/glass-windows/releases/latest/download/Glass-Windows.zip">
+    <img alt="Download Glass for Windows" src="https://img.shields.io/github/v/release/Ridou/glass-windows?label=%E2%AC%87%20Download%20Glass%20for%20Windows&style=for-the-badge&color=2ea043">
+  </a>
+  <br>
+  <sub>Always the newest version · <a href="https://github.com/Ridou/glass-windows/releases">all releases and what changed</a></sub>
+</p>
+
 Mirror a live region of one monitor as an always-on-top overlay on another, and click through
 it to the real thing underneath. Built for playing two WoW characters at once by hand: the
-healer's party frames float on the tank's monitor.
+healer's party frames float on the tank's monitor, or on one monitor with Alt+Tab.
 
 One input produces one action on one character. Glass never broadcasts, duplicates or
 automates input.
@@ -10,12 +18,15 @@ automates input.
 This is the Windows port of [Glass for macOS](https://github.com/Ridou/glass), kept feature for
 feature in step with it. The deliberate differences are listed in [HANDOFF.md](HANDOFF.md).
 
-## Download
+## Download and update
 
-**[Download Glass for Windows (Glass-Windows.zip)](https://github.com/Ridou/glass-windows/releases/latest/download/Glass-Windows.zip)**
+1. **[Download Glass-Windows.zip](https://github.com/Ridou/glass-windows/releases/latest/download/Glass-Windows.zip)**.
+   This link always gets the newest version.
+2. Right-click the zip > **Extract All**, then run `Glass.exe` from the extracted folder.
 
-That link always gets the newest version. Older versions and release notes are on the
-[Releases page](https://github.com/Ridou/glass-windows/releases).
+Glass checks for a newer version when it starts and tells you if there is one. You can also
+check in Settings > Help. To update, download again, quit Glass, and replace the old folder.
+Your settings are kept, because they live in `%APPDATA%\Glass`, not next to `Glass.exe`.
 
 ## Using it
 

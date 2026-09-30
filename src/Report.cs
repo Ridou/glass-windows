@@ -90,7 +90,7 @@ namespace Glass
             {
                 var v = Assembly.GetExecutingAssembly().GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion ?? "?";
                 var exe = Environment.ProcessPath ?? "?";
-                Line("  Glass " + v + ", built " + File.GetLastWriteTime(exe).ToString("yyyy-MM-dd HH:mm") + ", at " + exe);
+                Line("  Glass " + v + (Updates.Latest != null ? " (newest: " + Updates.Latest + ")" : "") + ", built " + File.GetLastWriteTime(exe).ToString("yyyy-MM-dd HH:mm") + ", at " + exe);
                 Line("  " + WindowsVersion() + ", " + (Environment.Is64BitOperatingSystem ? "64-bit" : "32-bit"));
                 Line("  Glass runs as administrator: " + (Wnd.WeAreElevated ? "yes" : "no"));
                 Line("  running since " + Process.GetCurrentProcess().StartTime.ToString("HH:mm:ss"));
@@ -193,6 +193,7 @@ namespace Glass
             void From(string what, string say) { int n = Count(what); if (n > 0) f.Add(say + (n > 1 ? " (" + n + " times recently)" : "")); }
 
             if (Count("fatal:") > 0) f.Add("Glass crashed recently. The log below has the details.");
+            if (Updates.Newer) f.Add("This is Glass " + Updates.Current + ", but " + Updates.Latest + " is out. Update first: " + Updates.DownloadUrl);
             var exe = Environment.ProcessPath ?? "";
             if (exe.IndexOf(@"\Temp\", StringComparison.OrdinalIgnoreCase) >= 0 || exe.IndexOf("Rar$", StringComparison.Ordinal) >= 0)
                 f.Add("Glass is running from inside the zip (a temporary folder). Extract the zip first (right-click > Extract All) "

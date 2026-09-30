@@ -688,7 +688,7 @@ namespace Glass
         // MARK: - Help tab
 
         TextBox reportBox;
-        Label helpStatus;
+        Label helpStatus, versionLabel;
 
         /// One button that gathers everything needed to diagnose a problem from afar, shown here
         /// in full so the person sending it can read what they are sending.
@@ -719,18 +719,41 @@ namespace Glass
                                   + "recent log. Nothing you type in the game is ever recorded.",
                                16, 148, W - 32, 34, false, 8.5f, Tertiary);
 
+            versionLabel = Text_(v, "", 16, 192, 420, 20, false, 9f);
+            Btn(v, "Check for Updates", W - 330, 186, 150, () =>
+            {
+                versionLabel.Text = "Checking…";
+                Updates.Check(quiet: true, done: ShowVersion);
+            }, 30);
+            Btn(v, "Download the Latest", W - 170, 186, 170, () =>
+            {
+                try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(Updates.DownloadUrl) { UseShellExecute = true }); }
+                catch (Exception e) { Log.Write("open download: " + e.Message); }
+            }, 30);
+
             reportBox = new TextBox
             {
                 Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Both, WordWrap = false,
-                Font = new Font("Consolas", 8.5f), Location = new Point(16, 186), Size = new Size(W - 16, 420),
+                Font = new Font("Consolas", 8.5f), Location = new Point(16, 226), Size = new Size(W - 16, 380),
                 BackColor = SystemColors.Window,
             };
             v.Controls.Add(reportBox);
         }
 
+        void ShowVersion()
+        {
+            if (versionLabel == null) return;
+            versionLabel.Text = "You have Glass " + Updates.Current + ". "
+                + (Updates.Latest == null ? "Newest: not checked yet."
+                   : Updates.Newer ? "Glass " + Updates.Latest + " is available -- download it on the right."
+                   : "That's the newest.");
+            versionLabel.ForeColor = Updates.Newer ? Color.FromArgb(200, 90, 0) : SystemColors.ControlText;
+        }
+
         /// What Copy Report would send right now, readable before it is sent.
         void ShowReport()
         {
+            ShowVersion();
             if (reportBox == null) return;
             try { reportBox.Text = Report.Build(); }
             catch (Exception e) { reportBox.Text = "Could not build the report: " + e.Message; }

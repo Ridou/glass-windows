@@ -43,6 +43,7 @@ namespace Glass
     --role NAME-REALM=tank|healer|dps   assign a character's role, then exit
     --list              list monitors, windows and presets, then exit
     --report            copy a help report and save it to the Desktop, then exit
+    --no-update-check   do not ask GitHub whether a newer Glass is out
     --reset             forget all presets and saved position
     --pid               route clicks with PostMessage instead of warping the cursor
 
@@ -161,6 +162,7 @@ namespace Glass
             if (int.TryParse(Arg("--settle"), out var settle)) Forward.SettleMs = Math.Max(0, settle);
             if (int.TryParse(Arg("--hover"), out var hover)) Forward.HoverMs = Math.Max(0, hover);
             Forward.ForcePost = Has("--pid");
+            Updates.Disabled = Has("--no-update-check");
             var mirror = Arg("--mirror");
             if (mirror != null)
             {
@@ -315,6 +317,9 @@ namespace Glass
                 }
                 ResolveStart(setName, region, presetName, windowName);
             });
+
+            // Once, a few seconds in, so starting up never waits on the network.
+            System.Threading.Tasks.Task.Delay(5000).ContinueWith(_ => Updates.Check());
 
             Application.Run(new ApplicationContext());
             Native.timeEndPeriod(1);

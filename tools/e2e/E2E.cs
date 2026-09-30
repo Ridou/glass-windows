@@ -213,7 +213,7 @@ sealed class Driver
             Move(Away); Mouse(N.LEFTDOWN); Thread.Sleep(30); Mouse(N.LEFTUP); Thread.Sleep(400);
 
             app = Process.Start(new ProcessStartInfo(glass,
-                $"--region {Region.X},{Region.Y},{Region.Width},{Region.Height} --at {OverlayAt.X},{OverlayAt.Y} --mirror screen {extra}")
+                $"--region {Region.X},{Region.Y},{Region.Width},{Region.Height} --at {OverlayAt.X},{OverlayAt.Y} --mirror screen --no-update-check {extra}")
                 { UseShellExecute = false });
             var overlay = WaitWindow("Glass", 15000);
             Thread.Sleep(1500);
@@ -280,7 +280,7 @@ sealed class Driver
             priest = StartTarget("Priest", FullRect);
             priestWnd = WaitWindow("Priest");
             Thread.Sleep(500);
-            app = Process.Start(new ProcessStartInfo(glass, $"--region {Region.X},{Region.Y},{Region.Width},{Region.Height} --at {at.X},{at.Y} --mirror window")
+            app = Process.Start(new ProcessStartInfo(glass, $"--region {Region.X},{Region.Y},{Region.Width},{Region.Height} --at {at.X},{at.Y} --mirror window --no-update-check")
                                 { UseShellExecute = false });
             var overlay = WaitWindow("Glass", 15000);
             Thread.Sleep(1500);

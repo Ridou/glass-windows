@@ -1,0 +1,84 @@
+# Builds Glass.exe on real Windows, tests it, and publishes the release.
+#
+#   Release: bump <Version> in Glass.csproj, commit, then
+#            git tag -a v1.2.3 -m "What changed, for the release notes" && git push origin v1.2.3
+#   Try it:  Actions > Release > Run workflow (builds and tests, publishes nothing)
+#
+# The zip is always built from exactly the tagged commit, and the tag must match the version
+# Glass reports, so the download, the release and "You have Glass X" can never disagree.
+
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Version must match the tag
+        shell: bash
+        run: |
+          v=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' Glass.csproj)
+          echo "VERSION=$v" >> "$GITHUB_ENV"
+          if [[ "$GITHUB_REF" == refs/tags/* && "${GITHUB_REF#refs/tags/v}" != "$v" ]]; then
+            echo "::error::tag ${GITHUB_REF#refs/tags/} does not match Glass.csproj version $v"; exit 1
+          fi
+
+      - name: Publish
+        run: dotnet publish Glass.csproj -c Release -o dist/Glass
+
+      - name: Self-test
+        shell: pwsh
+        run: |
+          $out = "$env:RUNNER_TEMP\selftest"
+          $p = Start-Process dist\Glass\Glass.exe -ArgumentList "--selftest", $out -Wait -PassThru
+          Get-Content "$out\selftest.txt"
+          if ($p.ExitCode -ne 0 -or (Get-Content "$out\selftest.txt" -Tail 1) -ne "ALL PASSED") { throw "self-test failed" }
+
+      - name: End-to-end (real Windows; informational)
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          dotnet publish tools/e2e/E2E.csproj -c Release -o "$env:RUNNER_TEMP\e2e" | Out-Null
+          $glass = (Resolve-Path dist\Glass\Glass.exe).Path
+          foreach ($s in "drive", "drive-window", "drive-window-front") {
+            & "$env:RUNNER_TEMP\e2e\E2E.exe" $s $glass "$env:RUNNER_TEMP\e2e-out\$s"
+            Write-Host "$s exit $LASTEXITCODE"
+          }
+
+      - name: Keep the test output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tests-${{ env.VERSION }}
+          path: |
+            ${{ runner.temp }}/selftest
+            ${{ runner.temp }}/e2e-out
+
+      - name: Zip
+        shell: pwsh
+        run: Compress-Archive -Path dist\Glass -DestinationPath Glass-Windows.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Glass-Windows-${{ env.VERSION }}
+          path: Glass-Windows.zip
+
+      - name: Publish the release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${GITHUB_REF#refs/tags/}" Glass-Windows.zip --title "Glass for Windows $VERSION" --notes-from-tag
