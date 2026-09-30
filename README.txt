@@ -41,6 +41,27 @@ FIRST RUN
    want it, then press Ctrl+Alt+L again to lock it (faint green edge).
 
 
+ONE MONITOR (ALT+TAB BETWEEN CHARACTERS)
+----------------------------------------
+With one monitor, Glass mirrors the other character's game window itself, so the mirror
+keeps showing it while you play the other character on top of it.
+
+1. Alt+Tab to the character whose frames you want (the healer, say).
+2. Press Ctrl+Alt+P and drag around the party frames.
+3. Alt+Tab back to the character you're playing. The mirror keeps showing the healer's
+   frames, and clicks and number keys on it go to the healer.
+
+On Windows 10, a thin yellow border appears around the mirrored game window. That's
+Windows showing that the window is being captured.
+
+If clicks on the mirror don't do anything in the game, open Settings > Regions and set
+"Clicks on a covered window" to "Bring it forward". The healer's window then flashes up
+for a moment with each click.
+
+With two or more monitors, Glass mirrors the part of the screen you pick. You can change
+this in Settings > Regions > "What the mirror shows".
+
+
 USING IT
 --------
 Locked (green edge)     Clicks go through to the game. Every mouse button, with any of
@@ -122,5 +143,7 @@ If Glass won't start at all, send this file instead:
 
   %LOCALAPPDATA%\Glass\Glass.log
 
-To quit, use tray menu > Quit Glass. For command-line options, run Glass.exe --help from
-a Command Prompt.
+TO QUIT: unlock the mirror (Ctrl+Alt+L) and click the X in its corner. Or use Settings >
+Help > Quit Glass, or tray menu > Quit Glass. Closing the Settings window only hides it.
+
+For command-line options, run Glass.exe --help from a Command Prompt.

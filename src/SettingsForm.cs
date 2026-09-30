@@ -29,7 +29,8 @@ namespace Glass
         TrackBar scaleBar, opacityBar;
         Label scaleLabel, opacityLabel, overlayStatus;
         CheckBox lockBox, showBox, keysBox, noFlipBox, postClicksBox, boostBox;
-        RadioButton[] headerModes;
+        RadioButton[] headerModes, mirrorModes, hiddenClickModes;
+        Label mirrorStatus;
         Command? recording;
         bool refreshing;
         bool quitting;
@@ -199,8 +200,57 @@ namespace Glass
                 y += 58;
             }
 
+            // One monitor: mirror a game window, which keeps showing while another covers it.
+            int m = 300;
+            Text_(v, "What the mirror shows", 16, m, 300, 22, true, 9.5f);
+            mirrorModes = Choice(v, 16, m + 26, 132, new[] { "Auto", "The screen", "A game window" }, i =>
+            {
+                Saved.MirrorMode = new[] { "auto", "screen", "window" }[i];
+                var r = Saved.Region;
+                if (r.HasValue && App.Overlay != null) App.Begin(r.Value, Saved.ActivePreset);
+                RefreshAll();
+            });
+            Hint(v, "A game window keeps showing even while another window covers it: two clients on one monitor, "
+                    + "switching with Alt+Tab. Pick the region while that client is in front. Auto uses a game window "
+                    + "with one monitor and the screen with more.", 16, m + 60, W - 32, 32);
+            mirrorStatus = Text_(v, "", 16, m + 96, W - 32, 18, false, 8.5f, Secondary);
+
+            int c = m + 128;
+            Text_(v, "Clicks on a covered window", 16, c, 300, 22, true, 9.5f);
+            hiddenClickModes = Choice(v, 16, c + 26, 160, new[] { "Send directly", "Bring it forward" }, i =>
+            {
+                Saved.HiddenClicks = i == 0 ? "post" : "front";
+                RefreshAll();
+            });
+            Hint(v, "Send directly never changes which window is in front. If clicks on the mirror do nothing in the "
+                    + "game, try Bring it forward: it always works, but that window flashes up for a moment.",
+                 16, c + 60, W - 32, 32);
+
             Btn(v, "Pick a One-Off Region…", 16, 560, 200, App.PickRegion, 30);
             Btn(v, "Reset Everything…", W - 172, 560, 170, () => { App.ResetEverything(); RefreshAll(); }, 30);
+        }
+
+        /// A row of toggle-style radio buttons; `picked` gets the index clicked.
+        /// Each row sits in a panel of its own: radio buttons sharing a container are one group,
+        /// and choosing in one row would clear the other.
+        RadioButton[] Choice(Control parent, int x, int y, int w, string[] labels, Action<int> picked)
+        {
+            var row = new Panel { Location = new Point(x, y), Size = new Size(labels.Length * (w + 4), 28) };
+            parent.Controls.Add(row);
+            var buttons = new RadioButton[labels.Length];
+            for (int i = 0; i < labels.Length; i++)
+            {
+                int index = i;
+                var r = new RadioButton
+                {
+                    Text = labels[i], Appearance = Appearance.Button, TextAlign = ContentAlignment.MiddleCenter,
+                    Location = new Point(i * (w + 4), 0), Size = new Size(w, 28), UseVisualStyleBackColor = true,
+                };
+                r.CheckedChanged += (o, e) => { if (!refreshing && r.Checked) picked(index); };
+                row.Controls.Add(r);
+                buttons[i] = r;
+            }
+            return buttons;
         }
 
         // MARK: - Overlay tab
@@ -373,6 +423,8 @@ namespace Glass
             var hint = Hint(v, "Esc cancels · a shortcut must include a modifier", W - 330, 566, 328, 20);
             hint.TextAlign = ContentAlignment.MiddleRight;
         }
+
+        static uint Pid(IntPtr h) { Native.GetWindowThreadProcessId(h, out uint pid); return pid; }
 
         void RestoreDefaults()
         {
@@ -661,6 +713,8 @@ namespace Glass
                 try { System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(Log.Dir) { UseShellExecute = true }); }
                 catch (Exception e) { Log.Write("open log folder: " + e.Message); }
             }, 32);
+            // Closing this window only hides it, as on the Mac. This is the way out.
+            Btn(v, "Quit Glass", W - 150, 108, 150, App.Quit, 32);
             helpStatus = Text_(v, "The report holds Glass's settings, your screen layout, the WoW windows it can see and the "
                                   + "recent log. Nothing you type in the game is ever recorded.",
                                16, 148, W - 32, 34, false, 8.5f, Tertiary);
@@ -724,6 +778,17 @@ namespace Glass
                 SetToggle(boostBox, Saved.GpuBoost);
                 var modes = new[] { HeaderMode.Auto, HeaderMode.Pinned, HeaderMode.Hidden };
                 for (int i = 0; i < 3; i++) headerModes[i].Checked = modes[i] == Saved.HeaderMode;
+
+                var mirror = new[] { "auto", "screen", "window" };
+                for (int i = 0; i < 3; i++) mirrorModes[i].Checked = mirror[i] == Saved.MirrorMode;
+                hiddenClickModes[0].Checked = Saved.HiddenClicks == "post";
+                hiddenClickModes[1].Checked = Saved.HiddenClicks == "front";
+                var t = App.Target;
+                mirrorStatus.Text = App.Overlay == null ? "Not mirroring anything yet."
+                    : t != IntPtr.Zero
+                        ? "Now mirroring a game window: " + Wnd.ProcessName(t) + " " + Pid(t) + ", \"" + Wnd.Title(t) + "\""
+                          + (App.Capture.WindowProblem != null ? " -- but window capture failed, so the screen is shown" : "")
+                        : "Now mirroring the screen" + (App.WindowMode ? " (no game window under the region)" : "") + ".";
 
                 foreach (var s in WowVisible)
                 {

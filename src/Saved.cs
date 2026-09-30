@@ -250,6 +250,30 @@ namespace Glass
             set => SetBool("clicksViaPid", value);
         }
 
+        /// What the mirror shows: "auto" (a window on one monitor, the screen on more),
+        /// "screen" or "window".
+        public static string MirrorMode
+        {
+            get { var m = GetString("mirrorMode", "auto"); return m == "screen" || m == "window" ? m : "auto"; }
+            set => SetString("mirrorMode", value);
+        }
+
+        /// How a click reaches a window that is covered: "post" sends it to the window directly,
+        /// "front" brings the window forward for the moment of the click.
+        public static string HiddenClicks
+        {
+            get => GetString("hiddenClicks", "post") == "front" ? "front" : "post";
+            set => SetString("hiddenClicks", value);
+        }
+
+        /// The program of the window last mirrored (WowB, WowClassic ...), for finding it again
+        /// after it restarts.
+        public static string BoundExe
+        {
+            get => GetString("boundExe");
+            set => SetString("boundExe", value);
+        }
+
         public static bool GpuBoost
         {
             get => GetBool("gpuBoost", false);

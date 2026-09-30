@@ -169,6 +169,34 @@ namespace Glass
             using (var pen = new Pen(edge, w))
             using (var path = Look.RoundRect(new RectangleF(w / 2, w / 2, Width - w, Height - w), 6))
                 g.DrawPath(pen, path);
+
+            // Unlocked, a quit button. Only then: a locked mirror passes every click through, and
+            // a button there would be one missed heal away from closing Glass.
+            if (!locked)
+            {
+                var r = CloseBox;
+                using (var bg = new SolidBrush(Color.FromArgb(220, 30, 30, 30)))
+                using (var path = Look.RoundRect(r, r.Height / 2f))
+                    g.FillPath(bg, path);
+                using (var pen = new Pen(Color.White, Math.Max(1.5f, r.Width / 11f)))
+                {
+                    float i = r.Width * 0.32f;
+                    g.DrawLine(pen, r.Left + i, r.Top + i, r.Right - i, r.Bottom - i);
+                    g.DrawLine(pen, r.Right - i, r.Top + i, r.Left + i, r.Bottom - i);
+                }
+            }
+        }
+
+        /// The quit button's place: the top-right corner, sized for the monitor's scale.
+        Rectangle CloseBox
+        {
+            get
+            {
+                float scale = Screens.For(Bounds)?.Scale ?? 1f;
+                int size = Math.Min((int)Math.Round(22 * scale), Math.Min(Width, Height) / 2);
+                int inset = (int)Math.Round(5 * scale);
+                return new Rectangle(Width - size - inset, inset, size, size);
+            }
         }
 
         // MARK: - Input
@@ -185,7 +213,7 @@ namespace Glass
             var global = new Point(Left + Native.LoWord(lParam), Top + Native.HiWord(lParam));
             var target = SourcePoint(global);
             if (Covers(target)) return;
-            Forward.Click(target, button);
+            Forward.Click(target, button, App.Target);
         }
 
         bool coverWarned;
@@ -195,6 +223,9 @@ namespace Glass
         /// said once, since nothing else would explain the dead clicks.
         bool Covers(Point target)
         {
+            // Posted to a mirrored window, input never touches the screen at that spot, so the
+            // mirror may sit anywhere -- on one monitor it usually overlaps the covered client.
+            if (App.Target != IntPtr.Zero && Saved.HiddenClicks == "post") return false;
             bool covered = Bounds.Contains(target) || (Bar != null && Bar.Visible && Bar.Bounds.Contains(target));
             if (covered && !coverWarned)
             {
@@ -228,7 +259,7 @@ namespace Glass
             var global = new Point(Native.LoWord(m.LParam), Native.HiWord(m.LParam));
             var target = SourcePoint(global);
             if (Covers(target)) return;
-            Forward.Scroll(target, notch);
+            Forward.Scroll(target, notch, App.Target);
         }
 
         protected override void WndProc(ref Message m)
@@ -252,6 +283,12 @@ namespace Glass
 
                 case Native.WM_LBUTTONDOWN:
                 case Native.WM_LBUTTONDBLCLK:
+                    if (!locked && CloseBox.Contains(new Point(Native.LoWord(m.LParam), Native.HiWord(m.LParam))))
+                    {
+                        Log.Write("quit from the mirror's close button");
+                        App.Defer(App.Quit);
+                        return;
+                    }
                     if (!locked)
                     {
                         // Unlocked, a plain drag repositions instead of clicking through. There is
@@ -300,6 +337,12 @@ namespace Glass
 
         /// Unlocked: drag anywhere to reposition, and nothing passes through -- so you can place
         /// it without firing off heals. Locked: every click goes to the source.
+        protected override void OnMouseMove(MouseEventArgs e)
+        {
+            base.OnMouseMove(e);
+            if (!locked) Cursor = CloseBox.Contains(e.Location) ? Cursors.Hand : Cursors.SizeAll;
+        }
+
         public void SetLocked(bool value)
         {
             locked = value;

@@ -443,6 +443,9 @@ namespace Glass
 
         [DllImport("dwmapi.dll")]
         public static extern int DwmGetWindowAttribute(IntPtr hWnd, int attr, out int value, int size);
+        [DllImport("dwmapi.dll")]
+        public static extern int DwmGetWindowAttribute(IntPtr hWnd, int attr, out RECT value, int size);
+        public const int DWMWA_EXTENDED_FRAME_BOUNDS = 9;
         [DllImport("shcore.dll")]
         public static extern int GetDpiForMonitor(IntPtr monitor, int type, out uint x, out uint y);
         /// One-millisecond timer resolution, so a 20ms step is 20ms and not the default

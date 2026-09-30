@@ -143,9 +143,12 @@ namespace Glass
 
         // MARK: - Public entry points (any thread)
 
-        public static void Click(Point target, MouseButtons button)
+        /// `window`: in window mode, the mirrored window, which may be covered by the one being
+        /// played. Input then goes to it rather than to whatever is on screen at `target`.
+        public static void Click(Point target, MouseButtons button, IntPtr window = default)
         {
             bool post = ForcePost || Saved.ClicksViaPid;
+            bool front = Saved.HiddenClicks == "front";
             jobs.Add(() =>
             {
                 if (!WaitForRelease(button))
@@ -153,15 +156,20 @@ namespace Glass
                     Log.Write("click " + button + " held over 2s -- not forwarded");
                     return;
                 }
-                if (post) PostClick(target, button); else WarpClick(target, button);
+                if (window != IntPtr.Zero) HiddenClick(window, target, button, front);
+                else if (post) PostClick(target, button); else WarpClick(target, button);
             });
         }
 
-        public static void Scroll(Point target, int notches)
+        public static void Scroll(Point target, int notches, IntPtr window = default)
         {
             if (notches == 0) return;
             bool post = ForcePost || Saved.ClicksViaPid;
-            jobs.Add(() => { if (post) PostScroll(target, notches); else WarpScroll(target, notches); });
+            jobs.Add(() =>
+            {
+                if (window != IntPtr.Zero) HiddenScroll(window, target, notches);
+                else if (post) PostScroll(target, notches); else WarpScroll(target, notches);
+            });
         }
 
         static int routingLogged;
@@ -182,9 +190,9 @@ namespace Glass
 
         /// Called from the keyboard hook, so it only enqueues: `viaPost` comes from the hook's
         /// snapshot rather than from Saved, which would mean taking a lock.
-        public static void Key(int vk, Point target, uint mods, bool viaPost)
+        public static void Key(int vk, Point target, uint mods, bool viaPost, IntPtr window = default)
         {
-            jobs.Add(() => RunKeyJob(vk, target, mods, viaPost));
+            jobs.Add(() => RunKeyJob(vk, target, mods, viaPost, window));
         }
 
         // MARK: - Warp there and back
@@ -426,6 +434,137 @@ namespace Glass
             Log.Write("click " + button + " -> " + Wnd.ProcessName(hWnd) + " at " + p.X + "," + p.Y + " via post");
         }
 
+        // MARK: - A covered window (window mode)
+
+        /// A click on a window that another window covers -- one monitor, two clients. A real
+        /// click at that spot would land on the window in front, the character being played.
+        ///
+        /// "post" (the default): the cursor still goes to the spot, so a client reading the
+        /// cursor sees it on the right frame, but the button messages go straight to the covered
+        /// window. Nothing changes focus and nothing flashes. Whether WoW acts on posted clicks
+        /// is the open question this mode exists to answer; keys posted this way work.
+        ///
+        /// "front": bring the covered window forward, click it for real, and hand focus back.
+        /// Known to work, at the cost of that window flashing up for a moment.
+        static void HiddenClick(IntPtr hWnd, Point global, MouseButtons button, bool front)
+        {
+            var t0 = Stopwatch.StartNew();
+            if (!Native.IsWindow(hWnd)) { Log.Write("click: the mirrored window is gone"); return; }
+            CheckReachable(hWnd);
+            if (front) { FrontClick(hWnd, global, button, t0); return; }
+
+            Native.GetCursorPos(out POINT origin);
+            warpOrigin = new Point(origin.X, origin.Y);
+            bool sent = false;
+            try
+            {
+                if (!PinTo(global)) return;
+                var p = new POINT(global.X, global.Y);
+                Native.ScreenToClient(hWnd, ref p);
+                var at = Native.MakeLParam(p.X, p.Y);
+                int downMsg, upMsg, xbutton;
+                Messages(button, out downMsg, out upMsg, out xbutton);
+                int mods = HeldModifiers();
+                Native.PostMessage(hWnd, Native.WM_MOUSEMOVE, new IntPtr(mods), at);
+                Pause(StepMs);
+                PinTo(global);
+                Native.PostMessage(hWnd, downMsg, new IntPtr((xbutton << 16) | mods | ButtonMask(button)), at);
+                Pause(StepMs);
+                Native.PostMessage(hWnd, upMsg, new IntPtr((xbutton << 16) | mods), at);
+                Pause(StepMs);
+                sent = true;
+            }
+            finally
+            {
+                Pause(SettleMs);
+                Native.SetCursorPos(origin.X, origin.Y);
+                warpOrigin = null;
+            }
+            Log.Write(string.Format("click {0} at {1},{2} posted to covered {3}, {4:F0}ms{5}", button, global.X, global.Y,
+                                    Who(hWnd), t0.Elapsed.TotalMilliseconds, sent ? "" : " -- refused"));
+        }
+
+        static void FrontClick(IntPtr hWnd, Point global, MouseButtons button, Stopwatch t0)
+        {
+            IntPtr home = Native.GetForegroundWindow();
+            if (!Wnd.FocusAndWait(hWnd, 250, 2))
+            {
+                Log.Write("click " + button + ": " + Who(hWnd) + " would not come forward -- refused");
+                System.Media.SystemSounds.Beep.Play();
+                return;
+            }
+            var took = t0.ElapsedMilliseconds;
+            ButtonFlags(Physical(button), out uint down, out uint up, out uint data);
+            Native.GetCursorPos(out POINT origin);
+            warpOrigin = new Point(origin.X, origin.Y);
+            bool sent = false;
+            try
+            {
+                if (!PinTo(global)) return;
+                Pause(StepMs);
+                if (!PinTo(global)) return;
+                Send(MouseInput(down, data));
+                Pause(StepMs);
+                PinTo(global);
+                Send(MouseInput(up, data));
+                Pause(StepMs);
+                sent = true;
+            }
+            finally
+            {
+                Pause(SettleMs);
+                Native.SetCursorPos(origin.X, origin.Y);
+                warpOrigin = null;
+            }
+            string back = "focus stayed on " + Who(hWnd);
+            if (home != IntPtr.Zero && home != hWnd && !Wnd.IsOurs(home))
+            {
+                var sw = Stopwatch.StartNew();
+                bool ok = Wnd.FocusAndWait(home, 150, 2);
+                back = "focus back to " + Who(home) + (ok ? " ok in " + sw.ElapsedMilliseconds + "ms" : " FAILED, now on " + Who(Native.GetForegroundWindow()));
+                if (!ok) System.Media.SystemSounds.Beep.Play();
+            }
+            Log.Write(string.Format("click {0} at {1},{2} with {3} brought forward in {4}ms, {5:F0}ms{6}; {7}", button, global.X, global.Y,
+                                    Who(hWnd), took, t0.Elapsed.TotalMilliseconds, sent ? "" : " -- refused", back));
+        }
+
+        static void HiddenScroll(IntPtr hWnd, Point global, int notches)
+        {
+            if (!Native.IsWindow(hWnd)) return;
+            Native.GetCursorPos(out POINT origin);
+            warpOrigin = new Point(origin.X, origin.Y);
+            try
+            {
+                if (!PinTo(global)) return;
+                Pause(StepMs);
+                var w = new IntPtr(unchecked((notches * Native.WHEEL_DELTA) << 16) | HeldModifiers());
+                Native.PostMessage(hWnd, Native.WM_MOUSEWHEEL, w, Native.MakeLParam(global.X, global.Y));
+                Pause(StepMs);
+            }
+            finally
+            {
+                Pause(SettleMs);
+                Native.SetCursorPos(origin.X, origin.Y);
+                warpOrigin = null;
+            }
+            Log.Write("wheel " + (notches > 0 ? "up" : "down") + " at " + global.X + "," + global.Y + " posted to covered " + Who(hWnd));
+        }
+
+        static void Messages(MouseButtons button, out int downMsg, out int upMsg, out int xbutton)
+        {
+            xbutton = 0;
+            switch (button)
+            {
+                case MouseButtons.Right: downMsg = Native.WM_RBUTTONDOWN; upMsg = Native.WM_RBUTTONUP; break;
+                case MouseButtons.Middle: downMsg = Native.WM_MBUTTONDOWN; upMsg = Native.WM_MBUTTONUP; break;
+                case MouseButtons.XButton1:
+                    downMsg = Native.WM_XBUTTONDOWN; upMsg = Native.WM_XBUTTONUP; xbutton = Native.XBUTTON1; break;
+                case MouseButtons.XButton2:
+                    downMsg = Native.WM_XBUTTONDOWN; upMsg = Native.WM_XBUTTONUP; xbutton = Native.XBUTTON2; break;
+                default: downMsg = Native.WM_LBUTTONDOWN; upMsg = Native.WM_LBUTTONUP; break;
+            }
+        }
+
         static void PostScroll(Point global, int notches)
         {
             var hWnd = Wnd.At(global);
@@ -476,13 +615,14 @@ namespace Glass
 
         /// Runs on the forwarding worker. Jobs are serial and each restores focus before it
         /// ends, so whoever has focus when a job starts is the right one to hand it back to.
-        static void RunKeyJob(int vk, Point at, uint mods, bool viaPost)
+        static void RunKeyJob(int vk, Point at, uint mods, bool viaPost, IntPtr window)
         {
             var t0 = Stopwatch.StartNew();
             Func<string> ms = () => string.Format("{0:F0}ms", t0.Elapsed.TotalMilliseconds);
             string name = Shortcut.Name(vk);
 
-            var target = Wnd.At(at);
+            // In window mode the key goes to the mirrored window, even while it is covered.
+            var target = window != IntPtr.Zero && Native.IsWindow(window) ? window : Wnd.At(at);
             if (target == IntPtr.Zero)
             {
                 Log.Write("key " + name + ": no window under " + at.X + "," + at.Y + " -- dropped");
@@ -533,7 +673,7 @@ namespace Glass
                     Send(KeyInput(vk, true));
                     Pause(StepMs);
                 }
-                Log.Write("key " + name + " -> " + Wnd.ProcessName(target)
+                Log.Write("key " + name + " -> " + Who(target) + (window != IntPtr.Zero ? " (mirrored window)" : "")
                           + (viaPost ? " via post" : " via focus") + " at " + ms());
             }
             finally

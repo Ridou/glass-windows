@@ -32,6 +32,8 @@ static class E2E
         }
         if (a.Length >= 2 && a[0] == "noact") { Application.Run(new NoActivate(a[1])); return 0; }
         if (a.Length >= 3 && a[0] == "drive") return new Driver(a[1], a[2], a.Length > 3 ? string.Join(" ", a.Skip(3)) : "").Run();
+        if (a.Length >= 3 && a[0] == "drive-window") return new Driver(a[1], a[2], "").RunWindow(front: false);
+        if (a.Length >= 3 && a[0] == "drive-window-front") return new Driver(a[1], a[2], "").RunWindow(front: true);
         Console.WriteLine("usage: E2E drive GLASS.EXE OUTDIR");
         return 2;
     }
@@ -210,7 +212,7 @@ sealed class Driver
             Move(Away); Mouse(N.LEFTDOWN); Thread.Sleep(30); Mouse(N.LEFTUP); Thread.Sleep(400);
 
             app = Process.Start(new ProcessStartInfo(glass,
-                $"--region {Region.X},{Region.Y},{Region.Width},{Region.Height} --at {OverlayAt.X},{OverlayAt.Y} {extra}")
+                $"--region {Region.X},{Region.Y},{Region.Width},{Region.Height} --at {OverlayAt.X},{OverlayAt.Y} --mirror screen {extra}")
                 { UseShellExecute = false });
             var overlay = WaitWindow("Glass", 15000);
             Thread.Sleep(1500);
@@ -254,6 +256,104 @@ sealed class Driver
         Console.WriteLine(report[report.Count - 1]);
         return failures == 0 ? 0 : 1;
     }
+
+    // MARK: - One monitor: the mirrored client covered by the played one
+
+    static readonly Rectangle FullRect = new Rectangle(0, 0, 1024, 768);
+
+    /// Both clients fill the one screen; the Warrior is played on top. The mirror must show and
+    /// drive the covered Priest. `front`: clicks bring the Priest forward instead of posting.
+    public int RunWindow(bool front)
+    {
+        Directory.CreateDirectory(outDir);
+        var settingsPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "Glass", "settings.json");
+        try { File.Delete(settingsPath); } catch { }
+        if (front) { Directory.CreateDirectory(Path.GetDirectoryName(settingsPath)); File.WriteAllText(settingsPath, "{ \"hiddenClicks\": \"front\" }"); }
+        try { glassLogStart = new FileInfo(GlassLog).Length; } catch { glassLogStart = 0; }
+        // Posting needs no screen at the spot, so the mirror may sit right over the Priest's
+        // region, as it will on one monitor. Bringing forward does need it clear.
+        var at = front ? new Point(600, 400) : new Point(120, 60);
+        var mid = new Point(at.X + 100, at.Y + 50);                  // maps to 150,100
+        try
+        {
+            priest = StartTarget("Priest", FullRect);
+            priestWnd = WaitWindow("Priest");
+            Thread.Sleep(500);
+            app = Process.Start(new ProcessStartInfo(glass, $"--region {Region.X},{Region.Y},{Region.Width},{Region.Height} --at {at.X},{at.Y} --mirror window")
+                                { UseShellExecute = false });
+            var overlay = WaitWindow("Glass", 15000);
+            Thread.Sleep(1500);
+            warrior = StartTarget("Warrior", FullRect);                  // the played client, on top
+            warriorWnd = WaitWindow("Warrior");
+            Thread.Sleep(800);
+            IntoGame();
+            var log = GlassLogSince();
+            Check("window mode binds to the Priest, picked while it was in front",
+                  log.Contains("window mode: mirroring E2E") && log.Contains("\"Priest\""), Line(log, "window mode"));
+            report.Add("info  capture: " + (log.Contains("from window") ? "from the window" : Line(log, "cannot capture the window")));
+            // Somewhere neither the mirror nor Wine's corner balloon sits.
+            var probe = new Point(900, 700);
+            Check("Warrior covers the Priest", N.GetAncestor(N.WindowFromPoint(new N.POINT { X = probe.X, Y = probe.Y }), 2) == warriorWnd, At(probe));
+            WaitNoBalloon(new Point(150, 100));
+
+            int p0 = Lines("Priest").Length, w0 = Lines("Warrior").Length;
+            Move(mid); Mouse(N.LEFTDOWN); Thread.Sleep(40); Mouse(N.LEFTUP); Thread.Sleep(1000);
+            var p = Lines("Priest").Skip(p0).ToList(); var w = Lines("Warrior").Skip(w0).ToList();
+            Check((front ? "brought forward" : "posted") + ": click lands on the covered Priest at 150,100",
+                  p.Any(l => l.StartsWith("LDOWN at=150,100")) && p.Any(l => l.StartsWith("LUP at=150,100")), string.Join("; ", p));
+            Check("...and never on the Warrior", !w.Any(l => l.StartsWith("LDOWN") || l.StartsWith("LUP")), string.Join("; ", w));
+            report.Add("info  " + Line(GlassLogSince(), "click Left"));
+
+            if (!front)
+            {
+                IntoGame();
+                p0 = Lines("Priest").Length; w0 = Lines("Warrior").Length;
+                Move(new Point(at.X + 10, at.Y + 90));
+                Key(N.VK_SHIFT, false); Mouse(N.RIGHTDOWN); Thread.Sleep(40); Mouse(N.RIGHTUP); Thread.Sleep(60); Key(N.VK_SHIFT, true);
+                Thread.Sleep(1000);
+                p = Lines("Priest").Skip(p0).ToList(); w = Lines("Warrior").Skip(w0).ToList();
+                Check("posted: shift+right click reaches the Priest at 60,140 with shift",
+                      p.Any(l => l.StartsWith("RDOWN at=60,140") && (int.Parse(l.Split("mk=")[1]) & 4) != 0), string.Join("; ", p));
+                Check("...and not the Warrior", !w.Any(l => l.StartsWith("RDOWN")), string.Join("; ", w));
+
+                p0 = Lines("Priest").Length; w0 = Lines("Warrior").Length;
+                Move(mid); Thread.Sleep(100);
+                Key('1', false); Thread.Sleep(40); Key('1', true); Thread.Sleep(900);
+                p = Lines("Priest").Skip(p0).ToList(); w = Lines("Warrior").Skip(w0).ToList();
+                Check("key 1 over the mirror reaches the covered Priest", p.Contains("KEYDOWN vk=49"), string.Join("; ", p));
+                Check("...and not the Warrior", !w.Any(l => l.EndsWith("vk=49")), string.Join("; ", w));
+
+                p0 = Lines("Priest").Length; w0 = Lines("Warrior").Length;
+                Mouse(N.WHEEL, 120); Thread.Sleep(900);
+                p = Lines("Priest").Skip(p0).ToList(); w = Lines("Warrior").Skip(w0).ToList();
+                Check("wheel reaches the covered Priest", p.Count(l => l.StartsWith("WHEEL delta=120")) == 1, string.Join("; ", p));
+                Check("...and not the Warrior", !w.Any(l => l.StartsWith("WHEEL")), string.Join("; ", w));
+
+                // The way out: unlock, and a close button appears in the mirror's corner.
+                Chord('L'); Thread.Sleep(600);
+                Move(new Point(at.X + 184, at.Y + 16)); Mouse(N.LEFTDOWN); Thread.Sleep(30); Mouse(N.LEFTUP);
+                bool quit = app.WaitForExit(8000);
+                Check("unlocked, the mirror's X quits Glass", quit, quit ? "exit " + app.ExitCode : "still running");
+                Check("...and says so in the log", GlassLogSince().Contains("quit from the mirror's close button"));
+            }
+
+            log = GlassLogSince();
+            File.WriteAllText(Path.Combine(outDir, "glass-run.log"), log);
+            Check("log: no fatal or unhandled errors", !log.Contains("fatal") && !log.Contains("unhandled") && !log.Contains("action failed"));
+        }
+        catch (Exception e) { Check("driver", false, e.ToString()); }
+        finally
+        {
+            foreach (var pr in new[] { app, priest, warrior }) { try { if (pr != null && !pr.HasExited) pr.Kill(); } catch { } }
+        }
+        report.Add(failures == 0 ? "ALL PASSED" : failures + " FAILED");
+        File.WriteAllLines(Path.Combine(outDir, "e2e.txt"), report);
+        Console.WriteLine(report[report.Count - 1]);
+        return failures == 0 ? 0 : 1;
+    }
+
+    static string Line(string log, string what) =>
+        log.Split('\n').FirstOrDefault(l => l.Contains(what))?.Trim() ?? "(no line with \"" + what + "\")";
 
     // MARK: - Checks
 
@@ -558,6 +658,14 @@ sealed class Driver
             Thread.Sleep(250);
         }
         report.Add("info  " + why + ": waited " + sw.ElapsedMilliseconds + "ms for Wine's tray balloon to clear " + p.X + "," + p.Y);
+    }
+
+    /// Wine's tray balloon sits top-left, over the Priest's region; a real click there would land in it.
+    void WaitNoBalloon(Point p)
+    {
+        var sw = Stopwatch.StartNew();
+        while (sw.ElapsedMilliseconds < 30000 && At(p).Contains("tooltips_class32")) Thread.Sleep(250);
+        report.Add("info  waited " + sw.ElapsedMilliseconds + "ms for Wine's tray balloon to clear " + p.X + "," + p.Y);
     }
 
     static string At(Point p)

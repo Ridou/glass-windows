@@ -1,4 +1,4 @@
-# Glass for Windows — handoff (2026-09-30, session 4)
+# Glass for Windows — handoff (2026-09-30, session 5)
 
 The user asked for a Windows `.exe` of Glass, zipped to share with a friend. It should have **all
 features exactly as on the Mac**, built from this Mac without live Windows testing. They work in
@@ -27,7 +27,8 @@ GitHub, and the old copy is deleted.
 | 10 | Move to `Ridou/glass-windows` | ✅ session 3 | First commit pushed to `main`; the old copy in the Mac repo is removed |
 | 11 | Second review + end-to-end test | ✅ session 4 | Two independent reviews; 13 fixes; `tools/e2e/run.sh`: 46 ok, 0 failed, 4 skipped (focus; Wine can't judge it) |
 | 12 | Help report for remote diagnosis | ✅ session 4 | Settings > Help > Copy Report; tray item; `--report`; e2e checks it |
-| 13 | Live test on real Windows | ⏳ the friend | Needs Windows and two WoW clients. Ask for `Glass.log` back |
+| 13 | First live report: one monitor | ✅ session 5 | Friend's report: one 3440x1440 monitor, two WowB clients stacked, Alt+Tab. Window mode built (1.1.0) |
+| 14 | Live test of window mode | ⏳ the friend | Needs Windows and two WoW clients. Ask for `Glass.log` back |
 
 Zip SHA-256 of the exe inside: `f0a3c330b6ea0e6c35c77bfe6230686d43ec2232e1deaf0c46c159f238056290` (session 4, with the Help tab).
 If you change any source, republish and rezip; the zip is only as fresh as its last build.
@@ -37,7 +38,7 @@ If you change any source, republish and rezip; the zip is only as fresh as its l
 1. **Releases.** The friend downloads from
    `https://github.com/Ridou/glass-windows/releases/latest/download/Glass-Windows.zip`, linked
    from `README.md`. `README.txt` in the zip points at the Releases page for updates. v1.0.0 was
-   published in session 4. To ship an update (ask first, since it's public):
+   published in session 4; v1.1.0 (window mode) is built. To ship an update (ask first, since it's public):
    ```sh
    rm -rf dist && dotnet publish -c Release -o dist/Glass && (cd dist && zip -r -X -q Glass-Windows.zip Glass)
    gh release create vX.Y.Z dist/Glass-Windows.zip -R Ridou/glass-windows --title "Glass for Windows X.Y.Z" --notes "..."
@@ -58,6 +59,55 @@ If you change any source, republish and rezip; the zip is only as fresh as its l
    - capture on a real GPU: that frames arrive (`capture format BGRA32`), and that the mirror
      leaves itself out (`could not exclude` must not appear);
    - mixed DPI across two monitors, and the wheel with "Scroll inactive windows" on.
+
+## What session 5 did (1.1.0: one monitor)
+
+The friend's first report (Glass 1.0.0), the run and the changes it led to:
+- **The setup:** one 3440x1440 monitor, two `WowB.exe` (`_classic_beta_`) clients, both full
+  screen at 0,0; he Alt+Tabs between them. He ran Glass from inside the zip
+  (`Temp\Rar$EX…`).
+- **What went wrong:** screen capture showed only the client in front, and clicks landed on it
+  (`focus stayed on WowB 10212`).
+- **"No way to quit":** the tray is hidden in the overflow, and the Settings X only hides it.
+- **The report fix:** "Glass was briefly slow to respond" was a false positive, because
+  "stalled" matched "installed". Patterns now match case-sensitively, and "thread stalled" is
+  the pattern.
+- **Window mode** (`App.WindowMode`: Auto = one monitor; Settings > Regions > "What the mirror
+  shows"; `--mirror screen|window|auto` for one run):
+  - **Binding.** `App.Bind` ties the region to a window: the one under the region when
+    picked, or `--window`. Otherwise the current one is kept while it lives; if it has
+    closed, it rebinds to a window of `Saved.BoundExe` covering the region that is *not* in
+    front. `App.Target` holds the window, and `HookState.Target` carries it to the hook.
+  - **Capture.** `WindowCapture` (`src/WindowCapture.cs`) uses Windows.Graphics.Capture
+    through CsWinRT: the TFM is now `net8.0-windows10.0.22621.0`, with
+    `SupportedOSPlatformVersion` at 19041. D3D11 goes through vtable function pointers. It
+    crops into the same DIB the overlay draws from.
+    - It falls back to BitBlt of the screen when unavailable, reported in
+      `Capture.WindowProblem`.
+    - The cursor is not captured. The yellow border shows on Windows 10, because
+      `IsBorderRequired` is Windows 11 only.
+    - **Untested on real Windows: Wine has no WGC.** Check the report for "capture: running
+      from window …" and a rising frame count.
+  - **Input.** `Forward.HiddenClick` has two modes, set by `Saved.HiddenClicks` (Settings:
+    "Clicks on a covered window"):
+    - "post" (the default) warps the cursor so `GetCursorPos` agrees, then posts the move,
+      down and up to the covered window. No focus change.
+    - "front" brings the window forward, SendInput-clicks, and hands focus back.
+    - Keys (post) and the wheel also go to `App.Target`. `Overlay.Covers` is skipped in post
+      mode, because the mirror on one monitor usually overlaps the region.
+    - **Open question for the live test: does WoW act on posted clicks while covered?** If
+      not, the friend switches to "Bring it forward".
+- **Quit.** Unlocked, the mirror draws an X in its top-right corner (`OverlayForm.CloseBox`),
+  which quits. Settings > Help > Quit Glass also quits.
+- **Zip warning.** Running from `Temp` with `Rar$`, `.zip` or `7z` in the path shows a
+  one-time "Extract Glass first" balloon and a report finding.
+- **Settings.** Radio rows are in their own panels (`SettingsForm.Choice`). Sharing a
+  container made them one group, which cleared each other.
+- **E2E.** `tools/e2e/run.sh` runs three scenarios: `screen`, plus `window` and `window-front`,
+  where stacked stand-ins cover the Priest with the Warrior. All pass. Window mode checks the
+  click, shift+right-click, key and wheel to the covered Priest, none to the Warrior, and the X
+  quitting.
+- The version is 1.1.0.
 
 ## What session 4 did (milestone 11)
 

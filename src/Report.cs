@@ -151,7 +151,18 @@ namespace Glass
                 if (live)
                     Line("  mirror: " + Rect(o.Bounds) + ", " + (o.Visible ? "shown" : "HIDDEN") + ", " + (Saved.Locked ? "locked" : "UNLOCKED")
                          + ", opacity " + (int)Math.Round(o.Opacity_ * 100) + "%");
-                Line("  capture: " + (App.Capture.Running ? "running" : "stopped") + ", " + App.Capture.Frames + " frames so far");
+                Line("  mirror shows: " + (App.WindowMode ? "a game window" : "the screen") + " (setting: " + (App.MirrorOverride ?? Saved.MirrorMode)
+                     + ", " + Screens.All().Count + " monitor" + (Screens.All().Count == 1 ? "" : "s") + ")");
+                var t = App.Target;
+                if (t != IntPtr.Zero)
+                {
+                    Native.GetWindowThreadProcessId(t, out uint tpid);
+                    Line("  mirrored window: " + Wnd.ProcessName(t) + " " + tpid + " \"" + Wnd.Title(t) + "\""
+                         + (Native.GetForegroundWindow() == t ? ", in front" : ", behind another window")
+                         + "; clicks on it: " + (Saved.HiddenClicks == "front" ? "bring it forward" : "sent directly"));
+                }
+                Line("  capture: " + (App.Capture.Running ? "running" : "stopped") + " from " + App.Capture.Method + ", "
+                     + App.Capture.Frames + " frames so far" + (App.Capture.WindowProblem != null ? "; window capture failed: " + App.Capture.WindowProblem : ""));
                 Line("  keyboard hook: " + (Hooks.Installed ? "installed" : "NOT INSTALLED"));
                 Line("  number keys over the mirror: " + (Saved.ForwardKeys ? "on" : "off") + ", sent " + (Saved.KeysViaPid ? "without switching focus" : "by switching focus"));
                 Line("  clicks: " + (Saved.ClicksViaPid || Forward.ForcePost ? "posted (cursor stays put)" : "cursor warps there and back"));
@@ -175,10 +186,21 @@ namespace Glass
         static List<string> Findings(List<string> log)
         {
             var f = new List<string>();
-            int Count(string what) => log.Count(l => l.IndexOf(what, StringComparison.OrdinalIgnoreCase) >= 0);
+            // Case matters: "FAILED" is how Glass shouts a failed hand-back, and "thread stalled" must
+            // not match "keyboard hook installed".
+            int Count(string what) => log.Count(l => l.IndexOf(what, StringComparison.Ordinal) >= 0);
             void From(string what, string say) { int n = Count(what); if (n > 0) f.Add(say + (n > 1 ? " (" + n + " times recently)" : "")); }
 
             if (Count("fatal:") > 0) f.Add("Glass crashed recently. The log below has the details.");
+            var exe = Environment.ProcessPath ?? "";
+            if (exe.IndexOf(@"\Temp\", StringComparison.OrdinalIgnoreCase) >= 0 || exe.IndexOf("Rar$", StringComparison.Ordinal) >= 0)
+                f.Add("Glass is running from inside the zip (a temporary folder). Extract the zip first (right-click > Extract All) "
+                      + "and run Glass.exe from there, or Windows may delete it while it runs.");
+            if (App.Target != IntPtr.Zero && App.Capture.WindowProblem != null)
+                f.Add("Glass couldn't capture the game window, so the mirror shows the screen instead: " + App.Capture.WindowProblem);
+            if (App.Hotkeys != null && App.Overlay != null && App.WindowMode && App.Target == IntPtr.Zero)
+                f.Add("One-monitor mode is on but no game window is under the mirrored region, so the screen is shown. "
+                      + "Alt+Tab to the character whose frames you want, then press Ctrl+Alt+P and drag around them.");
             if (!Wnd.WeAreElevated)
                 foreach (var h in Wnd.AllOrdinary())
                 {
@@ -203,7 +225,7 @@ namespace Glass
             From("never came forward", "A key was refused because the other game wouldn't come forward.");
             From("runs as administrator", "A game running as administrator blocked Glass's input.");
             From("hook missed a keystroke", "Windows dropped the keyboard hook and Glass had to reinstall it.");
-            From("stalled", "Glass was briefly slow to respond.");
+            From("thread stalled", "Glass was briefly slow to respond.");
             From("screen cannot be read", "The screen couldn't be read for a while (locked, or a permission prompt).");
             From("SendInput was refused", "Windows refused Glass's input.");
             From("no window under", "An input was dropped because nothing was under the pointer's target.");

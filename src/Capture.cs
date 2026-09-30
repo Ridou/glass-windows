@@ -42,17 +42,33 @@ namespace Glass
         /// rather than freezing on the last frame.
         public Action OnDrop;
 
-        IntPtr screenDC, dib, oldBitmap;
+        IntPtr screenDC, dib, oldBitmap, bits;
         Rectangle source;
+
+        /// Set when a window is being captured rather than the screen: the window, and the
+        /// mirrored rectangle in the window's own coordinates.
+        WindowCapture window;
+        Rectangle crop;
+        long lastWindowFrame;
+
+        /// "the screen" or "window WowB 1492", for the report.
+        public string Method { get; private set; } = "none";
+        /// Why window capture was not used, if it was asked for and failed.
+        public string WindowProblem { get; private set; }
+        /// Set when the captured window has closed; the owner rebinds.
+        public Action OnWindowClosed;
         Timer timer;
         int failures;
         int busy;
         bool loggedFormat;
 
-        public void Start(Rectangle rect, double fps)
+        /// Capture `rect` (screen pixels). With `hWnd`, capture that window's `windowRect` (window
+        /// pixels) instead, so it keeps showing while covered; the screen is the fallback.
+        public void Start(Rectangle rect, double fps, IntPtr hWnd = default, Rectangle windowRect = default)
         {
             Stop();
             if (rect.Width < 8 || rect.Height < 8) return;
+            WindowProblem = null;
 
             source = rect;
             Width = rect.Width;
@@ -73,7 +89,7 @@ namespace Glass
                 biBitCount = 32,
                 biCompression = Native.BI_RGB,
             };
-            dib = Native.CreateDIBSection(screenDC, ref bmi, Native.DIB_RGB_COLORS, out IntPtr bits, IntPtr.Zero, 0);
+            dib = Native.CreateDIBSection(screenDC, ref bmi, Native.DIB_RGB_COLORS, out bits, IntPtr.Zero, 0);
             if (dib == IntPtr.Zero)
             {
                 Log.Write("capture: could not allocate a " + Width + "x" + Height + " DIB");
@@ -82,13 +98,32 @@ namespace Glass
             }
             oldBitmap = Native.SelectObject(MemDC, dib);
 
+            Method = "the screen";
+            if (hWnd != IntPtr.Zero)
+            {
+                window = WindowCapture.TryStart(hWnd, out string why);
+                var who = Wnd.ProcessName(hWnd) + " " + WindowPid(hWnd);
+                if (window != null)
+                {
+                    crop = new Rectangle(windowRect.Location, new Size(Width, Height));
+                    Method = "window " + who;
+                    lastWindowFrame = Environment.TickCount64;
+                }
+                else
+                {
+                    WindowProblem = why;
+                    Log.Write("capture: cannot capture the window " + who + " (" + why + "); mirroring the screen instead");
+                }
+            }
+
             Running = true;
             failures = 0;
             loggedFormat = false;
             int period = Math.Max(4, (int)Math.Round(1000.0 / Math.Max(1, fps)));
             timer = new Timer(_ => Tick(), null, 0, period);
-            Log.Write(string.Format("capture started {0}x{1} at {2},{3}, {4} fps",
-                                    Width, Height, source.X, source.Y, (int)fps));
+            Log.Write(string.Format("capture started {0}x{1} at {2},{3}, {4} fps, from {5}",
+                                    Width, Height, window != null ? crop.X : source.X, window != null ? crop.Y : source.Y,
+                                    (int)fps, Method));
         }
 
         void Tick()
@@ -99,9 +134,12 @@ namespace Glass
             finally { Volatile.Write(ref busy, 0); }
         }
 
+        static uint WindowPid(IntPtr h) { Native.GetWindowThreadProcessId(h, out uint pid); return pid; }
+
         void TickOnce()
         {
             if (!Running) return;
+            if (window != null) { WindowTick(); return; }
             bool ok;
             lock (Gate)
             {
@@ -149,6 +187,49 @@ namespace Glass
             }
         }
 
+        /// A window frame, if a new one has arrived. A covered client may draw only a few times a
+        /// second, so no new frame is not a failure; an error or a closed window is.
+        void WindowTick()
+        {
+            bool fresh;
+            try
+            {
+                lock (Gate)
+                {
+                    if (!Running || window == null || bits == IntPtr.Zero) return;
+                    Native.GdiFlush();
+                    fresh = window.CopyLatest(crop, bits, Width * 4);
+                }
+            }
+            catch (Exception e)
+            {
+                if (++failures == 1) Log.Write("capture: window frame failed: " + e.Message);
+                return;
+            }
+            if (window.Closed)
+            {
+                Log.Write("capture: the mirrored window closed");
+                var closed = OnWindowClosed;
+                Stop();
+                if (closed != null) { try { closed(); } catch { } }
+                return;
+            }
+            if (!fresh)
+            {
+                if (Environment.TickCount64 - lastWindowFrame > 10000 && !loggedFormat)
+                {
+                    loggedFormat = true;     // reused as "said so once"
+                    Log.Write("capture: no picture from the window for 10s (minimised? WoW skips drawing when minimised)");
+                }
+                return;
+            }
+            lastWindowFrame = Environment.TickCount64;
+            if (failures > 0) { Log.Write("capture: window frames working again"); failures = 0; }
+            Interlocked.Increment(ref frames);
+            var f = OnFrame;
+            if (f != null) { try { f(); } catch { } }
+        }
+
         public void Stop()
         {
             Running = false;
@@ -156,6 +237,8 @@ namespace Glass
             if (t != null) { t.Dispose(); }
             lock (Gate)
             {
+                if (window != null) { window.Dispose(); window = null; }
+                bits = IntPtr.Zero;
                 if (MemDC != IntPtr.Zero)
                 {
                     if (oldBitmap != IntPtr.Zero) Native.SelectObject(MemDC, oldBitmap);

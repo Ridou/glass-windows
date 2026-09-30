@@ -31,6 +31,9 @@ namespace Glass
         public Rectangle Overlay;       // screen pixels
         public Rectangle Source;        // the region being mirrored
         public bool Visible, Locked, ForwardKeys, KeysViaPost, Picking;
+        /// In window mode, the mirrored window: forwarded keys go to it, not to whatever is on
+        /// screen at the source point.
+        public IntPtr Target;
         public Shortcut[] Shortcuts = new Shortcut[0];
 
         /// Screen point over the overlay -> the matching point in the captured region.
@@ -219,7 +222,7 @@ namespace Glass
             bool claim = Decide(vk, out var source, out uint mods, out bool viaPost);
             if (!claim) { passed.Add(vk); return false; }
             swallowed.Add(vk);
-            if (source.HasValue) Forward.Key(vk, source.Value, mods, viaPost);
+            if (source.HasValue) Forward.Key(vk, source.Value, mods, viaPost, State?.Target ?? IntPtr.Zero);
             return true;
         }
 

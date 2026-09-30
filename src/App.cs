@@ -6,6 +6,7 @@ using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
 namespace Glass
@@ -24,6 +25,13 @@ namespace Glass
 
         /// From the command line; the rest of the state lives in Saved.
         public static double Fps = 15;
+        /// --mirror screen|window|auto, for this run only. Null means use Settings.
+        public static string MirrorOverride;
+
+        /// The window being mirrored in window mode, or zero when the screen is.
+        public static volatile IntPtr Target;
+        /// The mirrored region in Target's own coordinates.
+        static Rectangle targetRect;
         public static double StartOpacity = 1.0;
         public static Point? StartAt;
 
@@ -71,11 +79,85 @@ namespace Glass
                 ForwardKeys = Saved.ForwardKeys,
                 KeysViaPost = Saved.KeysViaPid,
                 Picking = Picker.IsActive,
+                Target = Target,
                 Shortcuts = Commands.All.Select(Saved.GetShortcut).ToArray(),
             };
         }
 
         // MARK: - Actions
+
+        // MARK: - Screen or window
+
+        /// Mirror a game window rather than the screen? A window keeps showing while another
+        /// window covers it, which is what one monitor and Alt+Tab need; with two monitors the
+        /// screen is simpler and proven. Auto picks by the number of monitors.
+        public static bool WindowMode
+        {
+            get
+            {
+                var mode = MirrorOverride ?? Saved.MirrorMode;
+                if (mode == "window") return true;
+                if (mode == "screen") return false;
+                return Screens.All().Count == 1;
+            }
+        }
+
+        /// Where a window really is on screen. The window rectangle includes invisible resize
+        /// borders on Windows 10 and 11; the frame bounds are what is drawn, and what window
+        /// capture delivers.
+        public static Rectangle FrameBounds(IntPtr hWnd)
+        {
+            try
+            {
+                if (Native.DwmGetWindowAttribute(hWnd, Native.DWMWA_EXTENDED_FRAME_BOUNDS, out RECT fr, Marshal.SizeOf<RECT>()) == 0)
+                    return fr.ToRectangle();
+            }
+            catch { }
+            Native.GetWindowRect(hWnd, out RECT r);
+            return r.ToRectangle();
+        }
+
+        /// Decide which window a region belongs to. A region just picked belongs to the window it
+        /// was picked on -- the client in front at that moment. Otherwise the current one is kept
+        /// while it lives; if it has closed, the likeliest replacement is a window of the same
+        /// program that covers the region and is not the one being played.
+        static void Bind(Rectangle region, bool picked, IntPtr explicitWindow)
+        {
+            if (!WindowMode) { Target = IntPtr.Zero; return; }
+            var center = new Point(region.X + region.Width / 2, region.Y + region.Height / 2);
+            IntPtr h = explicitWindow;
+            if (h == IntPtr.Zero && picked) h = Wnd.At(center);
+            if (h == IntPtr.Zero && Target != IntPtr.Zero && Native.IsWindow(Target)) h = Target;
+            if (h == IntPtr.Zero)
+            {
+                var exe = Saved.BoundExe;
+                var front = Native.GetForegroundWindow();
+                var candidates = Wnd.AllOrdinary().Where(w =>
+                {
+                    Native.GetWindowRect(w, out RECT r);
+                    return r.ToRectangle().Contains(center) && (exe == null || Wnd.ProcessName(w) == exe);
+                }).ToList();
+                h = candidates.FirstOrDefault(w => w != front);
+                if (h == IntPtr.Zero) h = candidates.FirstOrDefault();
+            }
+            Target = h;
+            if (h == IntPtr.Zero) { Log.Write("window mode: no window to mirror there; mirroring the screen"); return; }
+            Saved.BoundExe = Wnd.ProcessName(h);
+            var frame = FrameBounds(h);
+            targetRect = new Rectangle(region.X - frame.X, region.Y - frame.Y, region.Width, region.Height);
+            Native.GetWindowThreadProcessId(h, out uint pid);
+            Log.Write("window mode: mirroring " + Saved.BoundExe + " " + pid + " \"" + Wnd.Title(h) + "\", "
+                      + region.Width + "x" + region.Height + " at " + targetRect.X + "," + targetRect.Y + " in the window"
+                      + (picked ? " (picked)" : ""));
+        }
+
+        /// The capture's window went away -- that client quit or restarted. Find it again.
+        static void WindowClosed()
+        {
+            Target = IntPtr.Zero;
+            var r = Saved.Region;
+            if (r.HasValue) Begin(r.Value, Saved.ActivePreset);
+        }
 
         public static void UsePreset(string name)
         {
@@ -89,13 +171,13 @@ namespace Glass
             Picker.Show("Drag the region for “" + name + "”  ·  Esc to cancel", r =>
             {
                 Saved.SetPreset(name, r);
-                Begin(r, name);
+                Begin(r, name, picked: true);
             });
         }
 
         public static void PickRegion()
         {
-            Picker.Show("Drag to choose what to mirror  ·  Esc to cancel", r => Begin(r, null));
+            Picker.Show("Drag to choose what to mirror  ·  Esc to cancel", r => Begin(r, null, picked: true));
         }
 
         public static void ToggleOverlay()
@@ -215,7 +297,9 @@ namespace Glass
         // MARK: - Mirroring
 
         /// Start, or switch to, mirroring a global rect.
-        public static void Begin(Rectangle region, string preset)
+        /// `picked`: the region was just chosen on screen, so it belongs to the window it was
+        /// chosen on. `window`: mirror this window, whatever is under the region.
+        public static void Begin(Rectangle region, string preset, bool picked = false, IntPtr window = default)
         {
             if (region.Width < 8 || region.Height < 8) { Log.Write("region too small, ignoring"); return; }
             if (Screens.For(region) == null) { Log.Write("no display contains that region"); return; }
@@ -223,6 +307,7 @@ namespace Glass
             Capture.Stop();
             Saved.Region = region;
             Saved.ActivePreset = preset;
+            Bind(region, picked, window);
 
             if (Overlay != null && !Overlay.IsDisposed)
             {
@@ -237,7 +322,8 @@ namespace Glass
             Settings?.RefreshAll();
             Publish();
 
-            Capture.Start(region, Fps);
+            Capture.OnWindowClosed = () => Defer(WindowClosed);
+            Capture.Start(region, Fps, Target, targetRect);
             var tag = preset != null ? " [" + preset + "]" : "";
             Log.Write("mirroring " + region.Width + "x" + region.Height + " at " + region.X + "," + region.Y + tag);
         }

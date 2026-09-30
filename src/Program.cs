@@ -29,6 +29,7 @@ namespace Glass
     --set NAME          drag out a region and save it as NAME, then mirror it
     --region X,Y,W,H    mirror this screen rectangle directly (pixels)
     --window NAME       mirror the largest window whose title or process matches NAME
+    --mirror MODE       screen, window or auto (default auto: a window on one monitor)
     --at X,Y            overlay top-left, screen pixels (default: last position)
     --scale F           overlay size multiplier (default 1.0)
     --fps N             capture rate (default 15)
@@ -160,6 +161,12 @@ namespace Glass
             if (int.TryParse(Arg("--settle"), out var settle)) Forward.SettleMs = Math.Max(0, settle);
             if (int.TryParse(Arg("--hover"), out var hover)) Forward.HoverMs = Math.Max(0, hover);
             Forward.ForcePost = Has("--pid");
+            var mirror = Arg("--mirror");
+            if (mirror != null)
+            {
+                if (mirror != "screen" && mirror != "window" && mirror != "auto") Die("--mirror takes screen, window or auto");
+                App.MirrorOverride = mirror;
+            }
             if (Has("--bar")) Saved.HeaderMode = HeaderMode.Pinned;
             if (Has("--no-bar")) Saved.HeaderMode = HeaderMode.Hidden;
 
@@ -282,6 +289,15 @@ namespace Glass
 
             Log.Write("displays: " + string.Join(" | ", Screens.All().Select(d => d.ToString().Trim())));
 
+            // Double-clicked inside the zip, Glass runs from a temporary folder the zip tool may
+            // delete while it runs, and "extract first" is the step people skip.
+            var exe = Environment.ProcessPath ?? "";
+            if (exe.IndexOf(@"\Temp\", StringComparison.OrdinalIgnoreCase) >= 0
+                && (exe.IndexOf("Rar$", StringComparison.Ordinal) >= 0 || exe.IndexOf(".zip", StringComparison.OrdinalIgnoreCase) >= 0
+                    || exe.IndexOf("7z", StringComparison.OrdinalIgnoreCase) >= 0))
+                App.Warn("Extract Glass first", "Glass is running from inside the zip. Quit it, right-click the zip > Extract All, "
+                         + "and run Glass.exe from the extracted folder.");
+
             if (!Saved.GetBool("welcomed", false))
             {
                 Saved.SetBool("welcomed", true);
@@ -314,13 +330,13 @@ namespace Glass
                 Picker.Show("Drag the region for “" + setName + "”  ·  Esc to cancel", r =>
                 {
                     Saved.SetPreset(setName, r);
-                    App.Begin(r, setName);
+                    App.Begin(r, setName, picked: true);
                 }, App.Quit);
                 return;
             }
             if (region != null)
             {
-                App.Begin(new System.Drawing.Rectangle((int)region[0], (int)region[1], (int)region[2], (int)region[3]), null);
+                App.Begin(new System.Drawing.Rectangle((int)region[0], (int)region[1], (int)region[2], (int)region[3]), null, picked: true);
                 return;
             }
             if (presetName != null)
@@ -334,8 +350,7 @@ namespace Glass
             {
                 var h = Wnd.LargestMatching(windowName);
                 if (h == IntPtr.Zero) Die("no on-screen window matching '" + windowName + "' -- try --list");
-                Native.GetWindowRect(h, out RECT wr);
-                App.Begin(wr.ToRectangle(), null);
+                App.Begin(App.FrameBounds(h), null, window: h);
                 return;
             }
             var saved = Saved.Region;
@@ -344,7 +359,7 @@ namespace Glass
                 App.Begin(saved.Value, Saved.ActivePreset);
                 return;
             }
-            Picker.Show("Drag to choose what to mirror  ·  Esc to cancel", r => App.Begin(r, null), App.Quit);
+            Picker.Show("Drag to choose what to mirror  ·  Esc to cancel", r => App.Begin(r, null, picked: true), App.Quit);
         }
     }
 }
