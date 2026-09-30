@@ -8,6 +8,8 @@ underneath, then hands focus straight back.
 It is built for playing two WoW characters at once by hand. Each click or key you make
 does one thing on one character. Glass never broadcasts, repeats or automates input.
 
+Newest version: https://github.com/Ridou/glass-windows/releases/latest
+
 
 BEFORE YOU START
 ----------------

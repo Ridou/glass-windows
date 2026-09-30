@@ -34,8 +34,16 @@ If you change any source, republish and rezip; the zip is only as fresh as its l
 
 ## Next
 
-1. Optionally, attach `dist/Glass-Windows.zip` to a GitHub release rather than committing it. This
-   is outward-facing, so ask first.
+1. **Releases.** The friend downloads from
+   `https://github.com/Ridou/glass-windows/releases/latest/download/Glass-Windows.zip`, linked
+   from `README.md`. `README.txt` in the zip points at the Releases page for updates. v1.0.0 was
+   published in session 4. To ship an update (ask first, since it's public):
+   ```sh
+   rm -rf dist && dotnet publish -c Release -o dist/Glass && (cd dist && zip -r -X -q Glass-Windows.zip Glass)
+   gh release create vX.Y.Z dist/Glass-Windows.zip -R Ridou/glass-windows --title "Glass for Windows X.Y.Z" --notes "..."
+   ```
+   Keep the asset name `Glass-Windows.zip`, or the "latest" link breaks. Bump `<Version>` in
+   `Glass.csproj` too.
 2. **Optional, only with the user's OK:** a headless run of the *full app*, for example
    `tools/wine.sh 30 dist/Glass/Glass.exe --region 0,0,320,200`, then read `Glass.log`.
    - It would exercise startup, capture, the overlay, the tray and the hotkeys, which

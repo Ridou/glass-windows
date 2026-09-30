@@ -10,9 +10,16 @@ automates input.
 This is the Windows port of [Glass for macOS](https://github.com/Ridou/glass), feature for
 feature. The deliberate differences are listed in [HANDOFF.md](HANDOFF.md).
 
+## Download
+
+**[Download Glass for Windows (Glass-Windows.zip)](https://github.com/Ridou/glass-windows/releases/latest/download/Glass-Windows.zip)**
+
+That link always gets the newest version. Older versions and release notes are on the
+[Releases page](https://github.com/Ridou/glass-windows/releases).
+
 ## Using it
 
-Download `Glass-Windows.zip`, extract it and run `Glass.exe`. [README.txt](README.txt) is the
+Extract the zip (right-click > Extract All) and run `Glass.exe`. [README.txt](README.txt) is the
 player's guide that ships in the zip. `Glass.exe --help` lists the command-line options.
 
 Requires Windows 10 version 2004 or later, or Windows 11, 64-bit. WoW must be in Windowed
