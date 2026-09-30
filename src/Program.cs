@@ -130,6 +130,8 @@ namespace Glass
             AttachConsole();
             Log.Start();
             Saved.Load();
+            Log.Write(Packaged.Is ? "packaged as " + Packaged.FullName : "running unpackaged");
+            Log.Write("settings: " + Saved.Path_);
 
             if (Has("--help") || Has("-h") || Has("/?")) { Say(Usage); return 0; }
 

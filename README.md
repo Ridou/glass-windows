@@ -67,12 +67,18 @@ dotnet publish -c Release -o dist/Glass       # dist/Glass/Glass.exe + README.tx
 cd dist && zip -r -X Glass-Windows.zip Glass
 ```
 
+The Microsoft Store package is built by `Actions > MSIX`, not by hand; it is the same code
+without the single-file packing, which an MSIX has no use for. See
+[HANDOFF.md](HANDOFF.md#the-microsoft-store-msix).
+
 Checks, all runnable from a Mac:
 
 - `tools/cmddiff/run.sh` compares the console commands byte for byte
   against the Mac build's Swift. It prints `BYTE-IDENTICAL`.
 - `tools/wine.sh 300 dist/Glass/Glass.exe --selftest 'C:\glass-selftest'` renders every window
   to PNG in a headless Wine prefix and runs the self-checks. It prints `ALL PASSED`.
+- `Glass.exe --theme-sample DIR` draws every piece of the look to one PNG and exits, for
+  working on it without launching anything.
 - `tools/e2e/run.sh` runs the real Glass.exe against two stand-in game windows. It sends
   clicks, keys, the wheel and hotkeys, and checks that each input reached exactly one of them,
   at the right place. It prints `ALL PASSED`.

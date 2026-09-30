@@ -11,11 +11,21 @@
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <RuntimeIdentifier>win-x64</RuntimeIdentifier>
 
-    <!-- One file, nothing to install: the .NET runtime travels inside Glass.exe. -->
+    <!-- One file, nothing to install: the .NET runtime travels inside Glass.exe.
+         Self-contained either way, because the Store resolves no .NET runtime dependency and
+         a framework-dependent package would simply fail to start on a PC without .NET 8.
+
+         For the Store (GlassMsix=true) the single file is turned off. An MSIX is already one
+         deliverable, so it buys nothing there, and it costs a lot: MSIX ships and updates in
+         64 KB blocks and hard-links what has not changed, which one opaque 60 MB blob
+         defeats, making every update a full download. It also breaks Assembly.Location and
+         extracts itself to %TEMP% on every launch. Trimming is off in both: it fails
+         silently, and WinForms leans on reflection. -->
     <SelfContained>true</SelfContained>
-    <PublishSingleFile>true</PublishSingleFile>
-    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
-    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <PublishSingleFile Condition="'$(GlassMsix)' != 'true'">true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract Condition="'$(GlassMsix)' != 'true'">true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile Condition="'$(GlassMsix)' != 'true'">true</EnableCompressionInSingleFile>
+    <PublishTrimmed>false</PublishTrimmed>
     <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
     <DebugType>none</DebugType>
 

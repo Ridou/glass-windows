@@ -1,0 +1,117 @@
+# Builds the Microsoft Store package, Glass.msix.
+#
+#   Try it:  Actions > MSIX > Run workflow. The package is attached as an artifact.
+#   Ship it: download the artifact and upload it in Partner Center.
+#
+# The package is left UNSIGNED on purpose. The Store re-signs every MSIX with a Microsoft
+# certificate during publishing, which is exactly why this route needs no code signing
+# certificate and why a Store install never meets SmartScreen. Signing it here would only
+# get in the way. For sideload testing, sign it yourself -- see HANDOFF.md.
+#
+# Before the first run, set these repository variables (Settings > Secrets and variables >
+# Actions > Variables) from Partner Center, under Product management > View app identity
+# details. They must match byte for byte, including case:
+#
+#   MSIX_IDENTITY_NAME       e.g. 12345Publisher.Glass
+#   MSIX_PUBLISHER           e.g. CN=ABCD1234-...
+#   MSIX_PUBLISHER_DISPLAY   your publisher display name
+#
+# Without them the workflow stops rather than building a package that would be rejected at
+# ingestion, which is a slow way to learn you had a typo.
+
+name: MSIX
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['msix-v*']
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Identity must be configured
+        shell: bash
+        env:
+          NAME: ${{ vars.MSIX_IDENTITY_NAME }}
+          PUB: ${{ vars.MSIX_PUBLISHER }}
+          DISPLAY: ${{ vars.MSIX_PUBLISHER_DISPLAY }}
+        run: |
+          missing=
+          [ -z "$NAME" ] && missing="$missing MSIX_IDENTITY_NAME"
+          [ -z "$PUB" ] && missing="$missing MSIX_PUBLISHER"
+          [ -z "$DISPLAY" ] && missing="$missing MSIX_PUBLISHER_DISPLAY"
+          if [ -n "$missing" ]; then
+            echo "::error::set these repository variables from Partner Center first:$missing"
+            exit 1
+          fi
+
+      - name: Version
+        shell: bash
+        run: |
+          v=$(sed -n 's:.*<Version>\(.*\)</Version>.*:\1:p' Glass.csproj)
+          echo "VERSION=$v" >> "$GITHUB_ENV"
+          # The Store reserves the fourth part of a package version; it must be 0.
+          echo "PKG_VERSION=$v.0" >> "$GITHUB_ENV"
+
+      - name: Publish
+        # Not single-file: an MSIX is already one deliverable, and a single file would make
+        # every update a full download instead of the changed blocks. See Glass.csproj.
+        run: dotnet publish Glass.csproj -c Release -r win-x64 -p:GlassMsix=true -o msix/package
+
+      - name: Self-test the binary that goes in the package
+        shell: pwsh
+        run: |
+          $out = "$env:RUNNER_TEMP\selftest"
+          $p = Start-Process msix\package\Glass.exe -ArgumentList "--selftest", $out -Wait -PassThru
+          Get-Content "$out\selftest.txt"
+          if ($p.ExitCode -ne 0 -or (Get-Content "$out\selftest.txt" -Tail 1) -ne "ALL PASSED") { throw "self-test failed" }
+
+      - name: Lay out the package
+        shell: pwsh
+        env:
+          NAME: ${{ vars.MSIX_IDENTITY_NAME }}
+          PUB: ${{ vars.MSIX_PUBLISHER }}
+          DISPLAY: ${{ vars.MSIX_PUBLISHER_DISPLAY }}
+        run: |
+          Copy-Item msix\Assets msix\package\Assets -Recurse
+          # The listing tile is for Partner Center, not for the package.
+          Remove-Item msix\package\Assets\StoreListing300x300.png
+          $m = Get-Content msix\AppxManifest.xml -Raw
+          $m = $m.Replace('__IDENTITY_NAME__', $env:NAME)
+          $m = $m.Replace('__PUBLISHER__', $env:PUB)
+          $m = $m.Replace('__PUBLISHER_DISPLAY_NAME__', $env:DISPLAY)
+          $m = $m.Replace('__VERSION__', $env:PKG_VERSION)
+          Set-Content msix\package\AppxManifest.xml $m -Encoding UTF8
+          # README.txt is the zip's player guide; the Store listing says all of this instead.
+          Remove-Item msix\package\README.txt -ErrorAction SilentlyContinue
+
+      - name: Pack
+        shell: pwsh
+        run: |
+          $kits = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Directory |
+                  Where-Object { Test-Path "$($_.FullName)\x64\makeappx.exe" } |
+                  Sort-Object Name -Descending
+          if (-not $kits) { throw "makeappx.exe not found in the Windows SDK" }
+          $makeappx = "$($kits[0].FullName)\x64\makeappx.exe"
+          Write-Host "using $makeappx"
+          & $makeappx pack /d msix\package /p "Glass-$env:VERSION.msix" /o
+          if ($LASTEXITCODE -ne 0) { throw "makeappx failed" }
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Glass-MSIX-${{ env.VERSION }}
+          path: Glass-${{ env.VERSION }}.msix
+
+      - name: Keep the test output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: msix-tests-${{ env.VERSION }}
+          path: ${{ runner.temp }}/selftest

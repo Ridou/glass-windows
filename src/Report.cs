@@ -94,6 +94,11 @@ namespace Glass
                 Line("  Glass " + v + (Updates.Latest != null ? " (newest: " + Updates.Latest + ")" : "") + ", built " + File.GetLastWriteTime(exe).ToString("yyyy-MM-dd HH:mm") + ", at " + exe);
                 Line("  " + WindowsVersion() + ", " + (Environment.Is64BitOperatingSystem ? "64-bit" : "32-bit"));
                 Line("  Glass runs as administrator: " + (Wnd.WeAreElevated ? "yes" : "no"));
+                // Packaged, Windows may redirect settings writes into the package's own store.
+                // Its own documentation disagrees with itself about when, so the answer is
+                // reported rather than assumed -- the file that was actually used is the truth.
+                Line("  packaged: " + (Packaged.Is ? Packaged.FullName : "no (plain Glass.exe)"));
+                Line("  settings: " + Saved.Path_ + (File.Exists(Saved.Path_) ? "" : "  (not written yet)"));
                 Line("  running since " + Process.GetCurrentProcess().StartTime.ToString("HH:mm:ss"));
             });
 

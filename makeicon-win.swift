@@ -129,6 +129,46 @@ for (s, img) in zip(sizes, images) {
 }
 for img in images { ico += img }
 
+// --msix DIR writes the package's tile images instead of the .ico: the same drawing, so the
+// Store listing, the Start tile and the taskbar cannot drift apart. Non-square tiles put the
+// icon in the middle of a transparent canvas rather than stretching it.
+if CommandLine.arguments.count > 2, CommandLine.arguments[1] == "--msix" {
+    let dir = CommandLine.arguments[2]
+    try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+
+    func png(_ w: Int, _ h: Int, icon side: Int, _ name: String) {
+        let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: w, pixelsHigh: h,
+                                   bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                                   colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
+        var pixels = drawIcon(size: CGFloat(side))
+        let provider = CGDataProvider(data: Data(bytes: &pixels, count: pixels.count) as CFData)!
+        let img = CGImage(width: side, height: side, bitsPerComponent: 8, bitsPerPixel: 32,
+                          bytesPerRow: side * 4, space: CGColorSpace(name: CGColorSpace.sRGB)!,
+                          bitmapInfo: CGBitmapInfo(rawValue: CGImageAlphaInfo.premultipliedLast.rawValue),
+                          provider: provider, decode: nil, shouldInterpolate: true, intent: .defaultIntent)!
+        NSGraphicsContext.current?.cgContext.draw(
+            img, in: CGRect(x: (w - side) / 2, y: (h - side) / 2, width: side, height: side))
+        NSGraphicsContext.current = nil
+        NSGraphicsContext.restoreGraphicsState()
+        let out = dir + "/" + name
+        try? rep.representation(using: .png, properties: [:])!.write(to: URL(fileURLWithPath: out))
+        print("wrote \(name) \(w)x\(h)")
+    }
+
+    png(50, 50, icon: 50, "StoreLogo.png")
+    png(44, 44, icon: 44, "Square44x44Logo.png")
+    png(71, 71, icon: 71, "Square71x71Logo.png")
+    png(150, 150, icon: 150, "Square150x150Logo.png")
+    png(310, 310, icon: 256, "Square310x310Logo.png")
+    png(310, 150, icon: 128, "Wide310x150Logo.png")
+    png(620, 300, icon: 256, "SplashScreen.png")
+    // The listing's own tile, which Partner Center wants larger than any of the above.
+    png(300, 300, icon: 256, "StoreListing300x300.png")
+    exit(0)
+}
+
 let path = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "Glass.ico"
 FileManager.default.createFile(atPath: path, contents: Data(ico))
 print("wrote \(path) (\(sizes.map(String.init).joined(separator: ", ")))")

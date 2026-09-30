@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The Store package. Built by .github/workflows/msix.yml, never by hand.
+
+  Identity/@Name and Identity/@Publisher must match, byte for byte and case for case, the
+  values Partner Center shows under Product management > View app identity details. They are
+  filled in from repository variables at build time (see the workflow) because they are not
+  known until the app's name is reserved, and a mismatch fails ingestion rather than
+  certification, which is a slower way to find out.
+
+  Version's fourth part must be 0: the Store reserves it. The first must not be 0.
+
+  Capabilities, and the reasoning, since a human reads this at submission:
+    runFullTrust                  Restricted, and required of every packaged Win32 app.
+                                  Glass installs a low-level keyboard hook (WH_KEYBOARD_LL)
+                                  and injects input with SendInput; neither works inside an
+                                  app container.
+    graphicsCapture               General use. Windows.Graphics.Capture.
+    graphicsCaptureProgrammatic   General use. Required to build a GraphicsCaptureItem from a
+                                  WindowId rather than through the picker, which is what
+                                  mirroring a chosen window means.
+
+  Deliberately NOT declared:
+    inputInjectionBrokered  would be worse than useless: input from it is only received by
+                            processes in the same app container. Win32 SendInput under
+                            runFullTrust is the right mechanism and needs no capability.
+    inputObservation,
+    inputSuppression        available only to selected Microsoft partners, and not needed:
+                            WH_KEYBOARD_LL is the Win32 equivalent and is not gated.
+    unvirtualizedResources  documented as intended for particular Microsoft-published games.
+                            Glass's settings are its own; redirection is no loss.
+    allowElevation          Glass runs asInvoker. Apps that need elevation are not accepted.
+-->
+<Package
+  xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+  xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+  xmlns:uap6="http://schemas.microsoft.com/appx/manifest/uap/windows10/6"
+  xmlns:uap10="http://schemas.microsoft.com/appx/manifest/uap/windows10/10"
+  xmlns:uap11="http://schemas.microsoft.com/appx/manifest/uap/windows10/11"
+  xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+  IgnorableNamespaces="uap uap6 uap10 uap11 rescap">
+
+  <Identity
+    Name="__IDENTITY_NAME__"
+    Publisher="__PUBLISHER__"
+    Version="__VERSION__"
+    ProcessorArchitecture="x64" />
+
+  <Properties>
+    <DisplayName>Glass</DisplayName>
+    <PublisherDisplayName>__PUBLISHER_DISPLAY_NAME__</PublisherDisplayName>
+    <Logo>Assets\StoreLogo.png</Logo>
+    <Description>Mirror a region of one window as an always-on-top overlay, and click through it to the real thing underneath.</Description>
+  </Properties>
+
+  <Dependencies>
+    <!-- Windows 10 2004 is where Glass's capture path works; built against the Windows 11 SDK. -->
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.19041.0" MaxVersionTested="10.0.22621.0" />
+  </Dependencies>
+
+  <Resources>
+    <Resource Language="en-us" />
+  </Resources>
+
+  <Applications>
+    <Application Id="Glass" Executable="Glass.exe" EntryPoint="Windows.FullTrustApplication"
+                 uap10:TrustLevel="mediumIL" uap10:RuntimeBehavior="win32App">
+      <uap:VisualElements
+        DisplayName="Glass"
+        Description="Mirror a region of one window as an always-on-top overlay, and click through it to the real thing underneath."
+        BackgroundColor="transparent"
+        Square150x150Logo="Assets\Square150x150Logo.png"
+        Square44x44Logo="Assets\Square44x44Logo.png">
+        <uap:DefaultTile Wide310x150Logo="Assets\Wide310x150Logo.png" Square310x310Logo="Assets\Square310x310Logo.png" Square71x71Logo="Assets\Square71x71Logo.png" />
+        <uap:SplashScreen Image="Assets\SplashScreen.png" />
+      </uap:VisualElements>
+    </Application>
+  </Applications>
+
+  <Capabilities>
+    <rescap:Capability Name="runFullTrust" />
+    <uap6:Capability Name="graphicsCapture" />
+    <uap11:Capability Name="graphicsCaptureProgrammatic" />
+  </Capabilities>
+</Package>
