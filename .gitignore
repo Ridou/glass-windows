@@ -6,3 +6,5 @@ dist/
 .makeicon-win
 tools/wowdiff/cs/bin/
 tools/wowdiff/cs/obj/
+tools/e2e/bin/
+tools/e2e/obj/
