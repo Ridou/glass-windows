@@ -1,4 +1,4 @@
-# Glass for Windows — handoff (2026-09-30, session 7)
+# Glass for Windows — handoff (2026-09-30, session 8)
 
 The user asked for a Windows `.exe` of Glass, zipped to share with a friend. It should have **all
 features exactly as on the Mac**, built from this Mac without live Windows testing. They work in
@@ -70,6 +70,33 @@ If you change any source, republish and rezip; the zip is only as fresh as its l
    - capture on a real GPU: that frames arrive (`capture format BGRA32`), and that the mirror
      leaves itself out (`could not exclude` must not appear);
    - mixed DPI across two monitors, and the wheel with "Scroll inactive windows" on.
+
+## What session 8 did (1.2.1: downloads, updates, CI on real Windows)
+
+- **Download.** `README.md` opens with a large shields.io badge showing the newest version,
+  linking to `releases/latest/download/Glass-Windows.zip`. The Mac README links it too.
+- **Updates.** `Updates.cs` asks GitHub 5 s after start; a tray balloon appears if a newer
+  version is out. Help shows "You have X", with Check for Updates and Download the Latest,
+  and the report flags an outdated copy.
+- **CI.** `.github/workflows/release.yml` runs on `windows-latest`:
+  - A `v*` tag must match `<Version>`, and the release is published from the tag's notes
+    only after `--selftest` passes.
+  - Running it by hand builds and tests without publishing.
+  - It also runs the **e2e on real Windows**, where no-activate is honoured, so the focus
+    checks count. v1.2.1 is the first release built this way, and all three scenarios pass
+    there.
+- **Found by real Windows: focus after a shift-click.** Releasing Shift goes to the clicked
+  client, which then owns "last input", so `SetForegroundWindow` and `AttachThreadInput`
+  were both refused.
+  - `Wnd.Focus` now tries `SetForegroundWindow`, then `AttachThreadInput`, then
+    `SwitchToThisWindow`, then an **Alt tap**. The Alt tap is the documented unlock and is
+    what worked; it waits up to 1 s for Shift to be released first, because Alt+Shift can
+    switch layouts.
+  - Each method gets 60 ms to settle before the next is tried, and the log says `via …`.
+  - Trade-off: when the Alt tap is used, the clicked client receives a stray Alt
+    `SYSKEYDOWN`.
+- **Safety.** A brought-forward click refuses, with a beep, unless the target is at the spot
+  (after raising it). The Mac has the same rule.
 
 ## What session 7 did (1.2.0, and the Mac tested live)
 
