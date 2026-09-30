@@ -231,14 +231,27 @@ namespace Glass
         /// Call from the forwarding worker, not the UI thread: attaching briefly shares input
         /// state with the foreground thread, and that must not be the thread the user is
         /// waiting on for everything else.
+        /// Which way the last successful Focus got there, for the log: Windows grants the
+        /// foreground by rules that differ with what the user was pressing, and the log is how
+        /// a failure in the field gets understood.
+        [ThreadStatic] public static string LastFocusMethod;
+
         public static bool Focus(IntPtr hWnd)
         {
+            LastFocusMethod = null;
             if (hWnd == IntPtr.Zero || !Native.IsWindow(hWnd)) return false;
-            if (Native.GetForegroundWindow() == hWnd) return true;
+            if (Native.GetForegroundWindow() == hWnd) { LastFocusMethod = "already"; return true; }
             // The Async forms: the plain ones wait on the window's own thread, and a client in a
             // loading screen would hold up every click and key queued behind this.
             if (Native.IsIconic(hWnd)) Native.ShowWindowAsync(hWnd, Native.SW_RESTORE);
-            if (Native.SetForegroundWindow(hWnd) && Native.GetForegroundWindow() == hWnd) return true;
+
+            // Windows lets a process take the foreground only if it received the last input.
+            // After a click Glass usually did; after a shift-click it did not -- releasing Shift
+            // went to the clicked client -- and plain SetForegroundWindow is refused. Measured
+            // on real Windows (the CI end-to-end run). So: the plain call, then attaching to the
+            // foreground thread, then SwitchToThisWindow (what Alt+Tab uses), then the
+            // documented unlock, a tap of Alt.
+            if (Native.SetForegroundWindow(hWnd) && Settled(hWnd)) { LastFocusMethod = "SetForegroundWindow"; return true; }
 
             uint self = Native.GetCurrentThreadId();
             uint front = Native.GetWindowThreadProcessId(Native.GetForegroundWindow(), out _);
@@ -252,7 +265,32 @@ namespace Glass
             }
             catch (Exception e) { Log.Write("focus failed: " + e.Message); }
             finally { if (attached) Native.AttachThreadInput(self, front, false); }
-            return Native.GetForegroundWindow() == hWnd;
+            if (Settled(hWnd)) { LastFocusMethod = "AttachThreadInput"; return true; }
+
+            Native.SwitchToThisWindow(hWnd, true);
+            if (Settled(hWnd)) { LastFocusMethod = "SwitchToThisWindow"; return true; }
+
+            // "The system automatically enables calls to SetForegroundWindow if the user presses
+            // the ALT key." Not while Shift is held: Left Alt + Shift switches keyboard layout.
+            bool shift = (Native.GetAsyncKeyState(Native.VK_SHIFT) & 0x8000) != 0;
+            if (!shift)
+            {
+                Forward.TapAlt();
+                Native.SetForegroundWindow(hWnd);
+                if (Settled(hWnd)) { LastFocusMethod = "Alt tap"; return true; }
+            }
+            return false;
+        }
+
+        /// Foreground changes land a moment after the call; give it that moment.
+        static bool Settled(IntPtr hWnd)
+        {
+            for (int i = 0; i < 6; i++)
+            {
+                if (Native.GetForegroundWindow() == hWnd) return true;
+                Thread.Sleep(2);
+            }
+            return false;
         }
 
         /// Focus a window and wait until Windows agrees.
@@ -263,11 +301,13 @@ namespace Glass
                 if (Focus(hWnd)) return true;
                 for (int i = 0; i < Math.Max(1, ms / 5); i++)
                 {
-                    if (Native.GetForegroundWindow() == hWnd) return true;
+                    if (Native.GetForegroundWindow() == hWnd) { LastFocusMethod ??= "late"; return true; }
                     Thread.Sleep(5);
                 }
             }
-            return Native.GetForegroundWindow() == hWnd;
+            if (Native.GetForegroundWindow() != hWnd) return false;
+            LastFocusMethod ??= "late";
+            return true;
         }
     }
 }

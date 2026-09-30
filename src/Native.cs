@@ -337,6 +337,8 @@ namespace Glass
         [DllImport("user32.dll")] public static extern bool SetForegroundWindow(IntPtr hWnd);
         [DllImport("user32.dll")] public static extern bool AllowSetForegroundWindow(int pid);
         [DllImport("user32.dll")] public static extern bool BringWindowToTop(IntPtr hWnd);
+        /// What Alt+Tab uses to switch; honoured in cases SetForegroundWindow is refused.
+        [DllImport("user32.dll")] public static extern void SwitchToThisWindow(IntPtr hWnd, bool altTab);
         [DllImport("user32.dll")] public static extern bool ShowWindow(IntPtr hWnd, int cmd);
         /// Never waits on the window's thread, unlike ShowWindow on another process's window.
         [DllImport("user32.dll")] public static extern bool ShowWindowAsync(IntPtr hWnd, int cmd);

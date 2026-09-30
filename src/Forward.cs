@@ -258,6 +258,14 @@ namespace Glass
             return false;
         }
 
+        /// A tap of Alt, tagged as Glass's own so the keyboard hook passes it by. Only for
+        /// unlocking SetForegroundWindow; see Wnd.Focus.
+        public static void TapAlt()
+        {
+            Send(KeyInput(Native.VK_MENU, false));
+            Send(KeyInput(Native.VK_MENU, true));
+        }
+
         static void Send(INPUT input)
         {
             var sent = Native.SendInput(1, new[] { input }, Marshal.SizeOf<INPUT>());
@@ -335,7 +343,7 @@ namespace Glass
             if (Native.GetForegroundWindow() == wasFront) { focusNote = took + "focus stayed on " + Who(wasFront); return; }
             var back = Stopwatch.StartNew();
             bool ok = Wnd.FocusAndWait(wasFront, 150, 2);
-            focusNote = took + "focus back to " + Who(wasFront) + (ok ? " ok in " + back.ElapsedMilliseconds + "ms"
+            focusNote = took + "focus back to " + Who(wasFront) + (ok ? " ok in " + back.ElapsedMilliseconds + "ms via " + Wnd.LastFocusMethod
                                                                      : " FAILED, now on " + Who(Native.GetForegroundWindow()));
             if (!ok) System.Media.SystemSounds.Beep.Play();
         }
@@ -526,7 +534,7 @@ namespace Glass
             {
                 var sw = Stopwatch.StartNew();
                 bool ok = Wnd.FocusAndWait(home, 150, 2);
-                back = "focus back to " + Who(home) + (ok ? " ok in " + sw.ElapsedMilliseconds + "ms" : " FAILED, now on " + Who(Native.GetForegroundWindow()));
+                back = "focus back to " + Who(home) + (ok ? " ok in " + sw.ElapsedMilliseconds + "ms via " + Wnd.LastFocusMethod : " FAILED, now on " + Who(Native.GetForegroundWindow()));
                 if (!ok) System.Media.SystemSounds.Beep.Play();
             }
             Log.Write(string.Format("click {0} at {1},{2} with {3} brought forward in {4}ms, {5:F0}ms{6}; {7}", button, global.X, global.Y,
