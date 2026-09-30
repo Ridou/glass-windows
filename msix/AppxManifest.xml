@@ -47,7 +47,9 @@
     ProcessorArchitecture="x64" />
 
   <Properties>
-    <DisplayName>Glass</DisplayName>
+    <!-- Must match a name reserved in Partner Center, exactly. The Store shows this; the
+         executable stays Glass.exe and nothing else in the app is renamed. -->
+    <DisplayName>Glass Mirror</DisplayName>
     <PublisherDisplayName>__PUBLISHER_DISPLAY_NAME__</PublisherDisplayName>
     <Logo>Assets\StoreLogo.png</Logo>
     <Description>Mirror a region of one window as an always-on-top overlay, and click through it to the real thing underneath.</Description>
@@ -66,7 +68,7 @@
     <Application Id="Glass" Executable="Glass.exe" EntryPoint="Windows.FullTrustApplication"
                  uap10:TrustLevel="mediumIL" uap10:RuntimeBehavior="win32App">
       <uap:VisualElements
-        DisplayName="Glass"
+        DisplayName="Glass Mirror"
         Description="Mirror a region of one window as an always-on-top overlay, and click through it to the real thing underneath."
         BackgroundColor="transparent"
         Square150x150Logo="Assets\Square150x150Logo.png"
