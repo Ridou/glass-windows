@@ -33,9 +33,9 @@
     <Product>Glass</Product>
     <AssemblyTitle>Glass</AssemblyTitle>
     <Description>Mirror a screen region as an always-on-top overlay that clicks through to the real thing.</Description>
-    <Version>1.1.0</Version>
+    <Version>1.1.1</Version>
     <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
-    <FileVersion>1.1.0.0</FileVersion>
+    <FileVersion>1.1.1.0</FileVersion>
     <Copyright>Ridou</Copyright>
   </PropertyGroup>
 

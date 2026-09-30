@@ -7,8 +7,8 @@ healer's party frames float on the tank's monitor.
 One input produces one action on one character. Glass never broadcasts, duplicates or
 automates input.
 
-This is the Windows port of [Glass for macOS](https://github.com/Ridou/glass), feature for
-feature. The deliberate differences are listed in [HANDOFF.md](HANDOFF.md).
+This is the Windows port of [Glass for macOS](https://github.com/Ridou/glass), kept feature for
+feature in step with it. The deliberate differences are listed in [HANDOFF.md](HANDOFF.md).
 
 ## Download
 

@@ -1,4 +1,4 @@
-# Glass for Windows — handoff (2026-09-30, session 5)
+# Glass for Windows — handoff (2026-09-30, session 6)
 
 The user asked for a Windows `.exe` of Glass, zipped to share with a friend. It should have **all
 features exactly as on the Mac**, built from this Mac without live Windows testing. They work in
@@ -59,6 +59,34 @@ If you change any source, republish and rezip; the zip is only as fresh as its l
    - capture on a real GPU: that frames arrive (`capture format BGRA32`), and that the mirror
      leaves itself out (`could not exclude` must not appear);
    - mixed DPI across two monitors, and the wheel with "Scroll inactive windows" on.
+
+## What session 6 did (1.1.1, and Mac parity)
+
+- **Standing rule from the user:** every change to Glass for Windows should be considered for
+  Glass for Mac (`~/Projects/glass/glass.swift`), and vice versa. It is recorded in the Mac
+  repo's `.bb/AGENTS.md` and in memory.
+- **Windows 1.1.1.** In "Bring it forward" mode, `Forward.StepAside` makes the mirror and header
+  click-through (layered and transparent) for the moment of the click. The click then passes
+  to the client brought forward beneath them, even where the mirror covers the spot.
+  - `Overlay.Covers` no longer refuses anything in window mode, in either click mode.
+  - A Wine control run (`E2E.exe probe-transparent`) confirmed Wine honours a click-through
+    style set after creation.
+  - `window-front` now runs with the mirror over the region.
+  - A click whose spot is held by another window logs `click …: X is over the spot, not Y`.
+- **Mac port of 1.1.0** (in the Mac repo, built but untested live):
+  - Window mode: `mirrorsWindows()`, `bindWindow`, and `SCContentFilter(desktopIndependentWindow:)`
+    with a window-local `sourceRect`; `Saved.mirrorMode` and `boundApp`; `--mirror`.
+  - Clicks and the wheel on a covered window bring its app forward (`activateAndWait`),
+    because the Mac has no posted mouse events. The mirror steps aside with
+    `ignoresMouseEvents`. Keys go to `mirrorPID` via `postToPid`.
+  - An ✕ quit badge appears when unlocked.
+  - The App Translocation warning is the Mac's equivalent of the zip warning.
+  - Ported fixes: a held key belongs to its first owner (`passedKeys`), Glass's own clicks are
+    tagged and ignored, and a mirror over its own region is refused in screen mode.
+  - Settings > Regions: "What the mirror shows".
+  - The Help/report tab is **not** ported yet; it is the remaining parity item.
+  - Built ad-hoc here: this session has no Developer ID (`security find-identity`: 0), so it
+    must not be installed from here, or macOS drops the TCC grants.
 
 ## What session 5 did (1.1.0: one monitor)
 

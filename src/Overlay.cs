@@ -223,9 +223,10 @@ namespace Glass
         /// said once, since nothing else would explain the dead clicks.
         bool Covers(Point target)
         {
-            // Posted to a mirrored window, input never touches the screen at that spot, so the
-            // mirror may sit anywhere -- on one monitor it usually overlaps the covered client.
-            if (App.Target != IntPtr.Zero && Saved.HiddenClicks == "post") return false;
+            // In window mode the mirror may sit anywhere -- on one monitor it usually overlaps
+            // the covered client. Posted input never touches the screen at that spot, and a
+            // brought-forward click passes through the mirror (Forward.StepAside).
+            if (App.Target != IntPtr.Zero) return false;
             bool covered = Bounds.Contains(target) || (Bar != null && Bar.Visible && Bar.Bounds.Contains(target));
             if (covered && !coverWarned)
             {

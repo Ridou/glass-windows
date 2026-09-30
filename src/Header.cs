@@ -38,6 +38,21 @@ namespace Glass
         /// deliberately click them. Nothing actionable is ever a stray hover away.
         public bool Expanded => !compact;
 
+        /// For the forwarding worker, which must not touch the Form itself.
+        public static volatile IntPtr LiveHandle;
+
+        protected override void OnHandleCreated(EventArgs e)
+        {
+            base.OnHandleCreated(e);
+            LiveHandle = Handle;
+        }
+
+        protected override void OnHandleDestroyed(EventArgs e)
+        {
+            LiveHandle = IntPtr.Zero;
+            base.OnHandleDestroyed(e);
+        }
+
         public HeaderBar()
         {
             Size = new Size(CompactWidth, BarHeight);

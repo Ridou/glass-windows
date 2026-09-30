@@ -32,6 +32,7 @@ static class E2E
         }
         if (a.Length >= 2 && a[0] == "noact") { Application.Run(new NoActivate(a[1])); return 0; }
         if (a.Length >= 3 && a[0] == "drive") return new Driver(a[1], a[2], a.Length > 3 ? string.Join(" ", a.Skip(3)) : "").Run();
+        if (a.Length >= 2 && a[0] == "probe-transparent") return Driver.ProbeTransparent(a[1]);
         if (a.Length >= 3 && a[0] == "drive-window") return new Driver(a[1], a[2], "").RunWindow(front: false);
         if (a.Length >= 3 && a[0] == "drive-window-front") return new Driver(a[1], a[2], "").RunWindow(front: true);
         Console.WriteLine("usage: E2E drive GLASS.EXE OUTDIR");
@@ -270,9 +271,9 @@ sealed class Driver
         try { File.Delete(settingsPath); } catch { }
         if (front) { Directory.CreateDirectory(Path.GetDirectoryName(settingsPath)); File.WriteAllText(settingsPath, "{ \"hiddenClicks\": \"front\" }"); }
         try { glassLogStart = new FileInfo(GlassLog).Length; } catch { glassLogStart = 0; }
-        // Posting needs no screen at the spot, so the mirror may sit right over the Priest's
-        // region, as it will on one monitor. Bringing forward does need it clear.
-        var at = front ? new Point(600, 400) : new Point(120, 60);
+        // On one monitor the mirror usually sits over the Priest's region. Posting never
+        // touches the screen there, and a brought-forward click must pass through the mirror.
+        var at = new Point(120, 60);
         var mid = new Point(at.X + 100, at.Y + 50);                  // maps to 150,100
         try
         {
@@ -569,6 +570,31 @@ sealed class Driver
         Check("dragged home again", r.L == 600 && r.T == 400, r.L + "," + r.T);
     }
 
+    /// Control for StepAside: does this platform let a click through a window made layered
+    /// and transparent after it was created? Warrior below, a plain window on top.
+    public static int ProbeTransparent(string outDir)
+    {
+        Directory.CreateDirectory(outDir);
+        var d = new Driver("", outDir, "");
+        var w = Process.Start(new ProcessStartInfo(Environment.ProcessPath,
+            $"target Warrior 0 0 1024 768 \"{d.LogOf("Warrior")}\"") { UseShellExecute = false });
+        var ww = WaitWindow("Warrior");
+        var c = Process.Start(new ProcessStartInfo(Environment.ProcessPath, $"noact \"{d.LogOf("NoActivate")}\"") { UseShellExecute = false });
+        var cw = WaitWindow("NoActivate");
+        Thread.Sleep(15000);                              // Wine's first balloon, if any, clears
+        var p = new Point(490, 250);
+        Console.WriteLine("before: " + At(p));
+        int ex = N.GetWindowLong(cw, -20);
+        N.SetWindowLong(cw, -20, ex | 0x20 | 0x80000);
+        Thread.Sleep(200);
+        Console.WriteLine("after:  " + At(p));
+        Move(p); Mouse(N.LEFTDOWN); Thread.Sleep(30); Mouse(N.LEFTUP); Thread.Sleep(500);
+        Console.WriteLine("warrior got: " + string.Join("; ", d.Lines("Warrior").Where(l => l.StartsWith("LDOWN"))));
+        Console.WriteLine("control got: " + string.Join("; ", d.Lines("NoActivate")));
+        try { w.Kill(); c.Kill(); } catch { }
+        return 0;
+    }
+
     static int Count(string s, string what) { int n = 0, i = 0; while ((i = s.IndexOf(what, i)) >= 0) { n++; i += what.Length; } return n; }
 
     static string SettingsText()
@@ -663,8 +689,21 @@ sealed class Driver
     /// Wine's tray balloon sits top-left, over the Priest's region; a real click there would land in it.
     void WaitNoBalloon(Point p)
     {
+        // Any balloon over the spot, not just the top window: Glass's mirror may sit above it.
+        bool Balloon()
+        {
+            bool found = false;
+            N.EnumWindows((h, _) =>
+            {
+                var cls = new StringBuilder(64); N.GetClassName(h, cls, 64);
+                if (cls.ToString() == "tooltips_class32" && N.IsWindowVisible(h) && N.GetWindowRect(h, out var r)
+                    && p.X >= r.L && p.X < r.R && p.Y >= r.T && p.Y < r.B) { found = true; return false; }
+                return true;
+            }, IntPtr.Zero);
+            return found;
+        }
         var sw = Stopwatch.StartNew();
-        while (sw.ElapsedMilliseconds < 30000 && At(p).Contains("tooltips_class32")) Thread.Sleep(250);
+        while (sw.ElapsedMilliseconds < 30000 && Balloon()) Thread.Sleep(250);
         report.Add("info  waited " + sw.ElapsedMilliseconds + "ms for Wine's tray balloon to clear " + p.X + "," + p.Y);
     }
 
@@ -712,6 +751,10 @@ static class N
     [DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y);
     [DllImport("user32.dll")] public static extern bool ClipCursor(ref RECT r);
     [DllImport("user32.dll")] public static extern IntPtr WindowFromPoint(POINT p);
+    [DllImport("user32.dll")] public static extern int GetWindowLong(IntPtr h, int i);
+    public delegate bool EnumProc(IntPtr h, IntPtr l);
+    [DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc cb, IntPtr l);
+    [DllImport("user32.dll")] public static extern int SetWindowLong(IntPtr h, int i, int v);
     [DllImport("user32.dll")] public static extern IntPtr GetAncestor(IntPtr h, uint flags);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)] public static extern int GetClassName(IntPtr h, StringBuilder s, int n);
     [DllImport("user32.dll")] public static extern bool ClipCursor(IntPtr r);

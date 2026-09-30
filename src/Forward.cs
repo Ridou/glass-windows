@@ -22,6 +22,7 @@
 
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
 using System.Runtime.InteropServices;
@@ -498,11 +499,14 @@ namespace Glass
             Native.GetCursorPos(out POINT origin);
             warpOrigin = new Point(origin.X, origin.Y);
             bool sent = false;
+            var restore = StepAside();
             try
             {
                 if (!PinTo(global)) return;
                 Pause(StepMs);
                 if (!PinTo(global)) return;
+                var under = Native.GetAncestor(Native.WindowFromPoint(new POINT(global.X, global.Y)), Native.GA_ROOT);
+                if (under != hWnd) Log.Write("click " + button + ": " + Who(under) + " is over the spot, not " + Who(hWnd));
                 Send(MouseInput(down, data));
                 Pause(StepMs);
                 PinTo(global);
@@ -515,6 +519,7 @@ namespace Glass
                 Pause(SettleMs);
                 Native.SetCursorPos(origin.X, origin.Y);
                 warpOrigin = null;
+                restore();
             }
             string back = "focus stayed on " + Who(hWnd);
             if (home != IntPtr.Zero && home != hWnd && !Wnd.IsOurs(home))
@@ -526,6 +531,23 @@ namespace Glass
             }
             Log.Write(string.Format("click {0} at {1},{2} with {3} brought forward in {4}ms, {5:F0}ms{6}; {7}", button, global.X, global.Y,
                                     Who(hWnd), took, t0.Elapsed.TotalMilliseconds, sent ? "" : " -- refused", back));
+        }
+
+        /// Make the mirror and its header click-through for the moment of a real click, so a
+        /// click on a spot they cover passes to the window brought forward beneath them. The
+        /// Mac build does the same with ignoresMouseEvents. Returns the undo.
+        static Action StepAside()
+        {
+            var undo = new List<(IntPtr, int)>();
+            foreach (var h in new[] { OverlayForm.LiveHandle, HeaderBar.LiveHandle })
+            {
+                if (h == IntPtr.Zero) continue;
+                int ex = Native.GetWindowLong(h, Native.GWL_EXSTYLE);
+                // Layered and transparent: Windows hit-tests straight through the window.
+                Native.SetWindowLong(h, Native.GWL_EXSTYLE, ex | Native.WS_EX_TRANSPARENT | Native.WS_EX_LAYERED);
+                undo.Add((h, ex));
+            }
+            return () => { foreach (var (h, ex) in undo) Native.SetWindowLong(h, Native.GWL_EXSTYLE, ex); };
         }
 
         static void HiddenScroll(IntPtr hWnd, Point global, int notches)
