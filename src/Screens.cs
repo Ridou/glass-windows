@@ -271,21 +271,25 @@ namespace Glass
             if (Settled(hWnd)) { LastFocusMethod = "SwitchToThisWindow"; return true; }
 
             // "The system automatically enables calls to SetForegroundWindow if the user presses
-            // the ALT key." Not while Shift is held: Left Alt + Shift switches keyboard layout.
-            bool shift = (Native.GetAsyncKeyState(Native.VK_SHIFT) & 0x8000) != 0;
-            if (!shift)
+            // the ALT key." This is what worked on real Windows after a shift-click. Not while
+            // Shift is held -- Left Alt + Shift switches keyboard layout -- so wait up to a second
+            // for a shift-clicking hand to let go first.
+            var held = System.Diagnostics.Stopwatch.StartNew();
+            while ((Native.GetAsyncKeyState(Native.VK_SHIFT) & 0x8000) != 0 && held.ElapsedMilliseconds < 1000) Thread.Sleep(5);
+            if ((Native.GetAsyncKeyState(Native.VK_SHIFT) & 0x8000) == 0)
             {
                 Forward.TapAlt();
                 Native.SetForegroundWindow(hWnd);
-                if (Settled(hWnd)) { LastFocusMethod = "Alt tap"; return true; }
+                if (Settled(hWnd)) { LastFocusMethod = "Alt tap" + (held.ElapsedMilliseconds > 10 ? " after Shift let go" : ""); return true; }
             }
             return false;
         }
 
-        /// Foreground changes land a moment after the call; give it that moment.
+        /// Foreground changes can land a moment after the call; give it that moment before
+        /// escalating, or a stronger method starts while the first is still arriving.
         static bool Settled(IntPtr hWnd)
         {
-            for (int i = 0; i < 6; i++)
+            for (int i = 0; i < 30; i++)
             {
                 if (Native.GetForegroundWindow() == hWnd) return true;
                 Thread.Sleep(2);

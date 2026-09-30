@@ -387,6 +387,13 @@ sealed class Driver
               p.Any(l => l.StartsWith("RDOWN at=60,140") && (int.Parse(l.Split("mk=")[1]) & 4) != 0), string.Join("; ", p));
         FocusCheck("focus handed back after right click", N.GetForegroundWindow() == warriorWnd, "fg=" + Title(N.GetForegroundWindow()));
 
+        // Shift still held well after the click, as a hand doing a Clique shift-click might.
+        IntoGame();
+        Move(OverlayMid);
+        Key(N.VK_SHIFT, false); Mouse(N.LEFTDOWN); Thread.Sleep(40); Mouse(N.LEFTUP); Thread.Sleep(600); Key(N.VK_SHIFT, true);
+        Thread.Sleep(1200);
+        FocusCheck("shift held past the click: focus still comes back", N.GetForegroundWindow() == warriorWnd, "fg=" + Title(N.GetForegroundWindow()));
+
         // Near the far corner (the last few pixels are rounded off), to prove the mapping edges.
         p0 = Lines("Priest").Length;
         Move(new Point(OverlayAt.X + 196, OverlayAt.Y + 96));

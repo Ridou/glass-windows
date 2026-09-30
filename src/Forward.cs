@@ -513,8 +513,24 @@ namespace Glass
                 if (!PinTo(global)) return;
                 Pause(StepMs);
                 if (!PinTo(global)) return;
-                var under = Native.GetAncestor(Native.WindowFromPoint(new POINT(global.X, global.Y)), Native.GA_ROOT);
-                if (under != hWnd) Log.Write("click " + button + ": " + Who(under) + " is over the spot, not " + Who(hWnd));
+                // The one thing this must never do is click the character being played. If
+                // anything but the brought-forward client is at the spot, refuse.
+                Func<IntPtr> underSpot = () => Native.GetAncestor(Native.WindowFromPoint(new POINT(global.X, global.Y)), Native.GA_ROOT);
+                var under = underSpot();
+                // Focused is not always raised yet; nudge it to the top and look again.
+                for (int i = 0; i < 10 && under != hWnd; i++)
+                {
+                    Native.SetWindowPos(hWnd, Native.HWND_TOP, 0, 0, 0, 0,
+                                        Native.SWP_NOMOVE | Native.SWP_NOSIZE | Native.SWP_NOACTIVATE | Native.SWP_ASYNCWINDOWPOS);
+                    Thread.Sleep(10);
+                    under = underSpot();
+                }
+                if (under != hWnd)
+                {
+                    Log.Write("click " + button + ": " + Who(under) + " is over the spot, not " + Who(hWnd) + " -- refused");
+                    System.Media.SystemSounds.Beep.Play();
+                    return;
+                }
                 Send(MouseInput(down, data));
                 Pause(StepMs);
                 PinTo(global);
