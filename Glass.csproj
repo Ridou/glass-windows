@@ -41,8 +41,8 @@
 
   <ItemGroup>
     <EmbeddedResource Include="Glass.ico" LogicalName="Glass.ico" />
-    <EmbeddedResource Include="addon\Core.lua" LogicalName="Core.lua" />
-    <EmbeddedResource Include="addon\GlassSetup.toc" LogicalName="GlassSetup.toc" />
+    <!-- Marcellus stands in for the flared serif the look wants; OFL, so it ships with its licence. -->
+    <EmbeddedResource Include="fonts\Marcellus-Regular.ttf" LogicalName="Marcellus-Regular.ttf" />
     <!-- Beside Glass.exe in the published folder, not packed inside it. -->
     <None Include="README.txt" CopyToPublishDirectory="PreserveNewest" ExcludeFromSingleFile="true" />
   </ItemGroup>

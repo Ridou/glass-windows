@@ -16,7 +16,7 @@ enum WoWRole: String, CaseIterable {
     }
 }
 
-/// A WoW client setting, offered as console commands you copy and run yourself. Every CVar
+/// A game client setting, offered as console commands you copy and run yourself. Every CVar
 /// name here was checked against the Classic Era client binary before being offered. Glass
 /// does not touch the game: it only produces the text.
 struct WoWSetting {
@@ -24,7 +24,7 @@ struct WoWSetting {
     let title: String
     var detail = ""
     let cvars: [String: String]          // name → value when enabled
-    /// key → binding command, applied when ticked. WoW names the backtick key TILDE and
+    /// key → binding command, applied when ticked. The client names the backtick key TILDE and
     /// the middle mouse button BUTTON3.
     var bindings: [String: String] = [:]
     /// What those keys go back to when unticked. A key missing here is cleared instead.
@@ -69,7 +69,7 @@ let wowSettings: [WoWSetting] = [
                cvars: ["canUseQuestItemWithLeftClick": "1"], group: "Looting and interacting"),
 
     WoWSetting(key: "selfCast", title: "No self-cast modifier",
-               detail: "Otherwise Alt casts on yourself, so Clique alt-binds never reach the frame.",
+               detail: "Otherwise Alt casts on yourself, so click-cast alt-binds never reach the frame.",
                cvars: [:], group: "Casting and targeting", selfCastNone: true),
     WoWSetting(key: "keyDown", title: "Cast on key press, not release",
                detail: "Saves the time you hold the key down.",
@@ -86,7 +86,7 @@ let wowSettings: [WoWSetting] = [
                cvars: [:], bindings: ["Q": "STRAFELEFT", "E": "STRAFERIGHT"],
                offBindings: ["Q": "TURNLEFT", "E": "TURNRIGHT"], group: "Movement keys"),
     WoWSetting(key: "autorun", title: "Auto-run on the backtick key",
-               detail: "WoW calls that key TILDE. Unticking clears it rather than guessing your old bind.",
+               detail: "The client calls that key TILDE. Unticking clears it rather than guessing your old bind.",
                cvars: [:], bindings: ["TILDE": "TOGGLEAUTORUN"], group: "Movement keys"),
 
     WoWSetting(key: "swingTimer", title: "Show the swing timer",
@@ -140,7 +140,7 @@ let wowSettings: [WoWSetting] = [
     WoWSetting(key: "shadowLow", title: "Shadow Quality low (Mac)",
                detail: "Above Low, foliage renders black and a green tint covers everything.",
                cvars: ["graphicsShadowQuality": "0"], group: "Graphics"),
-    // Applying this one in the world is the documented crash: chrisdecember/wow-mac-boost hung
+    // Applying this one in the world is the documented crash: a known GPU-boost tool hung
     // a Mac twice with /console giQuality, and the beta drops WindowServer at world-load when
     // it is above Fair. The addon only writes a CVar whose value differs, and lowering it is
     // the safe direction — but never raise it, and never offer a higher value here.
@@ -178,7 +178,7 @@ let wowSettings: [WoWSetting] = [
     // MARK: Healer
 
     WoWSetting(key: "h.mouseoverCast", title: "Mouseover casting",
-               detail: "New in 1.60, built in. Cast on the frame under the pointer — the job Clique does today.",
+               detail: "New in 1.60, built in. Cast on the frame under the pointer, without a click-casting addon.",
                cvars: ["enableMouseoverCast": "1"], roles: [.healer], group: "Healer"),
     WoWSetting(key: "h.assistAttack", title: "Attack after an assist",
                detail: "Assisting the Warrior starts your attack too.",
@@ -309,7 +309,7 @@ func addonConfigLua() -> String {
 /// Just the commands for one setting, in the order they must run.
 func wowCommands(for s: WoWSetting) -> [String] { wowConsoleCommands([s]) }
 
-/// WoW's chat box strips newlines, so a multi-line paste arrives as one unparseable line.
+/// The chat box strips newlines, so a multi-line paste arrives as one unparseable line.
 /// A macro body does accept newlines, and caps at 255 characters — so commands are grouped
 /// into macro-sized chunks you can paste and click once each.
 func wowMacroChunks(_ lines: [String], limit: Int = 255) -> [String] {
@@ -336,7 +336,7 @@ func wowConsoleCommands(_ settings: [WoWSetting]) -> [String] {
     for s in settings {
         let on = Saved.wowSetting(s)
         for (name, value) in s.cvars.sorted(by: { $0.key < $1.key }) {
-            // Unticked means Blizzard's default, which the console cannot express directly.
+            // Unticked means the client's own default, which the console cannot express directly.
             lines.append(on ? "/console \(name) \(value)"
                             : "/run SetCVar(\"\(name)\",GetCVarDefault(\"\(name)\"))")
         }
@@ -371,8 +371,6 @@ func dump(_ name: String) {
     }
     print("-- per setting")
     for s in wowSettings { print("\(s.key) [\(s.group)] shared=\(s.isShared): \(wowCommands(for: s).joined(separator: " | "))") }
-    print("-- config")
-    print(addonConfigLua(), terminator: "")
     print("-- end")
 }
 

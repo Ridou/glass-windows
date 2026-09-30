@@ -17,7 +17,7 @@ GitHub, and the old copy is deleted.
 |---|-----------|--------|----------|
 | 1 | Research and design | ✅ session 1 | See "Design decisions" below |
 | 2 | Clean compile | ✅ session 2 | `dotnet build -c Release --no-incremental`: 0 errors, 0 warnings (rechecked in session 3) |
-| 3 | WoW output identical to the Mac | ✅ session 2 | `tools/wowdiff/run.sh` prints `BYTE-IDENTICAL` (rechecked in session 3) |
+| 3 | Console output identical to the Mac | ✅ session 2 | `tools/cmddiff/run.sh` prints `BYTE-IDENTICAL` (rechecked in session 3) |
 | 4 | Publish; PE checked | ✅ session 2 | `python3 tools/pe.py dist/Glass/Glass.exe`: subsystem 2, RT_ICON x10, GROUP_ICON, VERSION, MANIFEST |
 | 5 | Headless Wine prefix | ✅ session 2 | `~/Library/Caches/glass-wine/prefix`, graphics driver = `null` |
 | 6 | Wine smoke test | ✅ session 3 | `--help`, `--list`, `--selftest` pass; every screenshot reviewed at 96 and 144 dpi; 3 layout bugs fixed |
@@ -28,7 +28,7 @@ GitHub, and the old copy is deleted.
 | 11 | Second review + end-to-end test | ✅ session 4 | Two independent reviews; 13 fixes; `tools/e2e/run.sh`: 46 ok, 0 failed, 4 skipped (focus; Wine can't judge it) |
 | 12 | Help report for remote diagnosis | ✅ session 4 | Settings > Help > Copy Report; tray item; `--report`; e2e checks it |
 | 13 | First live report: one monitor | ✅ session 5 | Friend's report: one 3440x1440 monitor, two WowB clients stacked, Alt+Tab. Window mode built (1.1.0) |
-| 14 | Live test of window mode | ⏳ the friend | Needs Windows and two WoW clients. Ask for `Glass.log` back |
+| 14 | Live test of window mode | ⏳ the friend | Needs Windows and two game clients. Ask for `Glass.log` back |
 
 Zip SHA-256 of the exe inside: `f0a3c330b6ea0e6c35c77bfe6230686d43ec2232e1deaf0c46c159f238056290` (session 4, with the Help tab).
 If you change any source, republish and rezip; the zip is only as fresh as its last build.
@@ -191,7 +191,7 @@ The friend's first report (Glass 1.0.0), the run and the changes it led to:
     - "front" brings the window forward, SendInput-clicks, and hands focus back.
     - Keys (post) and the wheel also go to `App.Target`. `Overlay.Covers` is skipped in post
       mode, because the mirror on one monitor usually overlaps the region.
-    - **Open question for the live test: does WoW act on posted clicks while covered?** If
+    - **Open question for the live test: does the game act on posted clicks while covered?** If
       not, the friend switches to "Bring it forward".
 - **Quit.** Unlocked, the mirror draws an X in its top-right corner (`OverlayForm.CloseBox`),
   which quits. Settings > Help > Quit Glass also quits.
@@ -218,7 +218,7 @@ The user asked to "review again and validate it all works perfect" before offeri
   2. **Held key crossing the overlay edge.** Its repeats went to whoever the pointer was over
      now and the key-up was swallowed: a spell on the wrong character and a stuck key. Fix: a
      keypress belongs to whoever got its down (`Hooks.swallowed` / `passed`).
-  3. **Cursor clipped** (WoW "Lock Cursor to Window"). `SetCursorPos` stopped at the played
+  3. **Cursor clipped** (the game's "lock cursor to window"). `SetCursorPos` stopped at the played
      client's edge and the click landed there. Fix: `Forward.PinTo` confirms the cursor
      arrived; otherwise it refuses, logs and beeps. The README says what to turn off.
   4. Focus restore waits up to 400 ms (was 150) for the clicked client to activate.
@@ -256,14 +256,14 @@ The user asked to "review again and validate it all works perfect" before offeri
     - Versions, Windows build, elevation.
     - Displays and DPI.
     - Wheel routing, swapped buttons, keyboard layout.
-    - Every WoW window: pid, rect, display, elevated, focus.
+    - Every game window: pid, rect, display, elevated, focus.
     - Glass's live state: mirror, capture frames, hook, modes, taken shortcuts.
     - `settings.json` verbatim, and the last 400 log lines (topped up from `Glass.old.log`).
   - Every warp click's log line now ends with a focus trace, for example `-> WowClassic 4812;
     WowClassic 4812 took focus in 12ms; focus back to WowClassic 5120 ok in 3ms`. Focus is the
     main thing Wine couldn't prove, so read this first in the friend's report.
 - **Not changed, noted:**
-  - Posted-message coordinates assume WoW is per-monitor DPI aware.
+  - Posted-message coordinates assume the game is per-monitor DPI aware.
   - `WaitForRelease` waits for any press of that button.
   - Launching from a console ties Glass to that console.
   - The rounded corners (6 px) let a click on the very corner pixel reach the game underneath.
@@ -292,11 +292,11 @@ The user asked to "review again and validate it all works perfect" before offeri
   - `--selftest` also writes `settings-<tab>.txt`: every shown control with its bounds, and for
     fixed-size labels the width its text `needs`. Use it to spot cut-off text.
 - **Three real layout bugs, found by the smoke test and fixed.** These are not Wine quirks.
-  1. **WoW tab list.** It was anchored on all four sides while its page was still at the default
+  1. **Game tab list.** It was anchored on all four sides while its page was still at the default
      200×100, so it grew to about 1380×1020. The command column and Copy buttons ended up off the
      right edge, and Copy Ticked / Copy as Macro were covered.
      - Fix: the anchor is removed. The window has a fixed size.
-  2. **WoW command column.** A `Label` wraps at the space after `/run`, which left "/run" alone on
+  2. **Game command column.** A `Label` wraps at the space after `/run`, which left "/run" alone on
      the first line.
      - Fix: `SettingsForm.OneLineLabel` draws a single line with an end ellipsis, as the Mac
        truncates (`byTruncatingTail`).
@@ -320,7 +320,6 @@ The user asked to "review again and validate it all works perfect" before offeri
 - **Parity checked against the Mac.**
   - Neither build has a modifier-drag while locked. The Mac README says so; the "⌘-drag works
     either way" line in `glass.swift`'s header comment is stale.
-  - The Mac WoW tab has no Install button either: `--install-addon` is command-line only on both.
 - **Smoke test results.**
   - The log is clean. The only warning is the expected Wine one: `SetWindowDisplayAffinity` can't
     exclude the overlay from capture under Wine.
@@ -330,7 +329,7 @@ The user asked to "review again and validate it all works perfect" before offeri
 ## Wine notes (learned the hard way)
 
 - Use only `tools/wine.sh`; the prefix must stay headless (null driver, `winemac.drv` disabled),
-  because the user plays WoW while you test.
+  because the user plays the game while you test.
 - Run **`dist/Glass/Glass.exe`**, never `bin/Release/…/Glass.exe`. The build output lacks
   `System.Runtime.dll` and crashes. Publishing takes about 8 s.
 - **Changing dpi needs a fresh wineserver**, or controls scale while fonts don't:
@@ -356,7 +355,7 @@ export DOTNET_ROOT="$HOME/.dotnet" PATH="$HOME/.dotnet:$PATH" DOTNET_CLI_TELEMET
 dotnet build -c Release            # 0 warnings expected
 rm -rf dist && dotnet publish -c Release -o dist/Glass    # Glass.exe + README.txt
 python3 tools/pe.py dist/Glass/Glass.exe
-./tools/wowdiff/run.sh                            # BYTE-IDENTICAL
+./tools/cmddiff/run.sh                            # BYTE-IDENTICAL
 tools/wine.sh 300 dist/Glass/Glass.exe --selftest 'C:\glass-selftest'   # ALL PASSED
 ./tools/e2e/run.sh                                # ALL PASSED (focus checks skip under Wine)
 cd dist && rm -f Glass-Windows.zip && zip -r -X -q Glass-Windows.zip Glass
@@ -366,16 +365,14 @@ cd dist && rm -f Glass-Windows.zip && zip -r -X -q Glass-Windows.zip Glass
 - Size: WinForms can't be trimmed, so the self-contained single file carries the whole desktop
   runtime. Native libraries self-extract to `%TEMP%\.net\Glass\…` on first run. That's normal
   .NET behaviour.
-- `tools/wowdiff/`: `harness.swift` is the real WoW code cut from `glass.swift`, with a stub
-  `Saved`. `cs/` is the real `WowSettings.cs` with stubs; it uses Swift's defaults for the two
-  "(Mac)" settings. If `glass.swift`'s WoW section changes, regenerate `harness.swift` by cutting
+- `tools/cmddiff/`: `harness.swift` is the real settings code cut from `glass.swift`, with a stub
+  `Saved`. `cs/` is the real `GameSettings.cs` with stubs; it uses Swift's defaults for the two
+  "(Mac)" settings. If `glass.swift`'s settings section changes, regenerate `harness.swift` by cutting
   three spans:
   - `enum WoWRole` … up to `extension Saved {`
   - `/// The ticked settings, in the shape Core.lua reads` … up to `/// Install or update`
   - `/// Just the commands for one setting` … up to `// MARK: - Settings window`
-- `addon/Core.lua` and `GlassSetup.toc` are cut byte for byte from `glass.swift` and embedded as
-  resources. They are newer than `addon-archive/` because they add `RestartGx`. The addon was
-  reinstated in `glass.swift` on 2026-09-19, whatever `.bb/AGENTS.md` still says.
+
 
 ## Design decisions (settled; don't re-derive)
 
@@ -424,12 +421,12 @@ cd dist && rm -f Glass-Windows.zip && zip -r -X -q Glass-Windows.zip Glass
 - **Administrator:** `Forward.CheckReachable` detects a target running elevated while Glass isn't.
   It logs and shows a one-time tray balloon.
 - **`--selftest DIR`:** draws every window to PNG without showing it, and writes the layout dumps
-  and the WoW text. No hotkeys, no capture. It does install the keyboard hook briefly.
+  and the console text. No hotkeys, no capture. It does install the keyboard hook briefly.
 - **Research:**
   - LL hooks are silently removed on timeout (at most 1 s on Windows 10 1709+).
   - AltSnap watches for hook removal with Raw Input.
-  - HotkeyNet posts keys to background WoW.
-  - Blizzard bans broadcasting, not multiboxing.
+  - Keys can be posted to a background game window.
+  - Publishers ban input broadcasting, not playing two clients by hand.
   - Exclusive fullscreen can't be captured with BitBlt.
 
 ## Deliberate differences from the Mac build (tell the user)
@@ -455,10 +452,10 @@ cd dist && rm -f Glass-Windows.zip && zip -r -X -q Glass-Windows.zip Glass
   - A second launch with `--settings TAB` opens that tab.
   - A Help tab and help report (Copy Report, tray item, `--report`) for remote diagnosis.
   - The header drops below the overlay if there's no room above it.
-  - WoW setting details are shown under each checkbox.
+  - Game setting details are shown under each checkbox.
   - The text is worded for any player rather than "Warrior/Priest".
   - The tray menu is right-click (the Windows convention); double-click opens Settings.
-- **Wording:** "Alt-click" instead of ⌥-click, and `--install-addon` prints full paths.
+- **Wording:** "Alt-click" instead of ⌥-click.
 - **Capture:** the overlay and header are invisible to all screen capture, not only Glass's own.
   That includes screenshots, OBS and Discord.
 
@@ -473,17 +470,15 @@ cd dist && rm -f Glass-Windows.zip && zip -r -X -q Glass-Windows.zip Glass
 - `src/Shortcuts.cs`: HeaderMode, Shortcut, Command, Hotkeys.
 - `src/Forward.cs`: the worker, warp, clicks, wheel, keys, CheckReachable.
 - `src/Hooks.cs`: the hook thread, Claim, RawWatch.
-- `src/WowSettings.cs`: the settings table, console commands, macro chunks, addon config and
-  install.
+- `src/GameSettings.cs`: the settings table, console commands and macro chunks.
 - `src/Layered.cs`: LayeredSurface, LayeredForm, and `Look` (colours, round rects, MDL2 icon
   font).
 - Windows: `src/Picker.cs`, `Header.cs`, `Overlay.cs`, `GpuBoost.cs`, `Tray.cs`,
   `SettingsForm.cs` (which includes `OneLineLabel`).
 - `src/App.cs`, `src/Program.cs`, `src/SelfTest.cs` (which includes `Render` and `Layout`),
   `src/Report.cs` (the help report).
-- `addon/`: Core.lua and GlassSetup.toc, from glass.swift.
 - `README.md`: the repo's front page.
 - `README.txt`: for the friend. It is ASCII with CRLF line endings; keep it that way (after an
   edit, run `perl -pi -e 's/\r?\n/\r\n/' README.txt`).
-- `tools/`: `wine.sh`, `pe.py`, `wowdiff/`, `e2e/`.
+- `tools/`: `wine.sh`, `pe.py`, `cmddiff/`, `e2e/`.
 - `Glass.csproj`, `app.manifest`, `Glass.ico`, `makeicon-win.swift`, `.gitignore`.

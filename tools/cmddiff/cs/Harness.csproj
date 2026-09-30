@@ -8,8 +8,6 @@
     <RootNamespace>Glass</RootNamespace>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="../../../src/WowSettings.cs" />
-    <EmbeddedResource Include="../../../addon/Core.lua" LogicalName="Core.lua" />
-    <EmbeddedResource Include="../../../addon/GlassSetup.toc" LogicalName="GlassSetup.toc" />
+    <Compile Include="../../../src/GameSettings.cs" />
   </ItemGroup>
 </Project>

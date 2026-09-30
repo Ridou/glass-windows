@@ -8,11 +8,11 @@ namespace Glass
     public static class Saved
     {
         public static Dictionary<string, bool> Overrides = new Dictionary<string, bool>();
-        public static Dictionary<string, string> WowRoles = new Dictionary<string, string>();
+        public static Dictionary<string, string> GameRoles = new Dictionary<string, string>();
         /// The macOS defaults, which differ from the Windows build's for exactly two settings.
-        public static bool MacDefault(WoWSetting s) =>
+        public static bool MacDefault(GameSetting s) =>
             s.Key == "shadowLow" || s.Key == "secondaryLightingFair" ? true : s.DefaultOn;
-        public static bool WowSetting(WoWSetting s) => Overrides.TryGetValue(s.Key, out var v) ? v : MacDefault(s);
+        public static bool GameSetting(GameSetting s) => Overrides.TryGetValue(s.Key, out var v) ? v : MacDefault(s);
     }
     public static class Log { public static void Write(string m) { } }
     public static class Wnd { public static string ProcessPath(uint pid) => null; }
@@ -24,21 +24,19 @@ namespace Glass
         static void Dump(string name)
         {
             P("== scenario " + name + " ==");
-            var tabs = new List<(string, List<WoWSetting>)> { ("Everyone", Wow.Shared) };
-            tabs.AddRange(WoWRoles.All.Select(r => (WoWRoles.Title(r), Wow.For(r))));
+            var tabs = new List<(string, List<GameSetting>)> { ("Everyone", Game.Shared) };
+            tabs.AddRange(GameRoles.All.Select(r => (GameRoles.Title(r), Game.For(r))));
             foreach (var (t, list) in tabs)
             {
                 P("-- tab " + t);
-                P(string.Join("\n", Wow.ConsoleCommands(list)));
+                P(string.Join("\n", Game.ConsoleCommands(list)));
                 P("-- macros " + t);
-                P(string.Join("\n\n---\n\n", Wow.MacroChunks(Wow.ConsoleCommands(list))));
+                P(string.Join("\n\n---\n\n", Game.MacroChunks(Game.ConsoleCommands(list))));
             }
             P("-- per setting");
-            foreach (var s in Wow.Settings)
+            foreach (var s in Game.Settings)
                 P(s.Key + " [" + s.Group + "] shared=" + (s.IsShared ? "true" : "false") + ": "
-                  + string.Join(" | ", Wow.CommandsFor(s)));
-            P("-- config");
-            Console.Out.Write(Wow.AddonConfigLua());
+                  + string.Join(" | ", Game.CommandsFor(s)));
             P("-- end");
         }
 
@@ -46,12 +44,12 @@ namespace Glass
         {
             if (System.Environment.GetEnvironmentVariable("ROUNDTRIP") is string d) { RoundTrip.Write(d); return 0; }
             Dump("defaults");
-            Saved.WowRoles = new Dictionary<string, string>
+            Saved.GameRoles = new Dictionary<string, string>
                 { ["Jaysonheal-Doomhowl"] = "healer", ["Ridou-Doomhowl"] = "tank", ["Alt-Doomhowl"] = "dps" };
-            foreach (var s in Wow.Settings) Saved.Overrides[s.Key] = !Saved.MacDefault(s);
+            foreach (var s in Game.Settings) Saved.Overrides[s.Key] = !Saved.MacDefault(s);
             Dump("inverted");
             Saved.Overrides.Clear();
-            for (int i = 0; i < Wow.Settings.Count; i++) if (i % 3 == 0) Saved.Overrides[Wow.Settings[i].Key] = false;
+            for (int i = 0; i < Game.Settings.Count; i++) if (i % 3 == 0) Saved.Overrides[Game.Settings[i].Key] = false;
             Dump("every third off");
             return 0;
         }

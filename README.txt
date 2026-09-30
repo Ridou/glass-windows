@@ -5,7 +5,7 @@ Glass mirrors a region of your screen - your healer's party frames, say - as a s
 always-on-top window on another monitor. Clicking the mirror clicks the real thing
 underneath, then hands focus straight back.
 
-It is built for playing two WoW characters at once by hand. Each click or key you make
+It is built for playing two game clients at once by hand. Each click or key you make
 does one thing on one character. Glass never broadcasts, repeats or automates input.
 
 Newest version: https://github.com/Ridou/glass-windows/releases/latest
@@ -24,7 +24,7 @@ BEFORE YOU START
   your PC". Click "More info", then "Run anyway". Some antivirus programs are also wary
   of anything that watches the keyboard, which Glass does for mouseover keys (below).
 
-* In WoW's graphics options, set Display Mode to "Windowed (Fullscreen)". Glass can't see
+* In the game's graphics options, set Display Mode to "Windowed (Fullscreen)". Glass can't see
   a game running in exclusive fullscreen.
 
 * The first launch can take a few seconds. Later ones are quicker.
@@ -68,13 +68,13 @@ USING IT
 --------
 Locked (green edge)     Clicks go through to the game. Every mouse button, with any of
                         Shift, Ctrl and Alt, arrives exactly as you pressed it, so
-                        Clique binds work.
+                        click-cast binds work.
 Unlocked (orange edge)  A drag moves the mirror. Nothing clicks through.
 
 * A click is sent when you RELEASE the mouse button.
 
 * Mouseover keys: while the pointer is over the locked mirror, the number row (1 to 0,
-  - and =) acts on the frame you're hovering. That's for Clique mouseover binds or an
+  - and =) acts on the frame you're hovering. That's for click-casting mouseover binds or an
   MMO mouse's side buttons. Everywhere else those keys work as usual. You can turn this
   off in Settings > Overlay.
 
@@ -95,14 +95,14 @@ Shortcuts (change them in Settings > Shortcuts):
 Keyboards with an AltGr key (German, French, Polish and others) treat Ctrl+Alt as AltGr.
 If a shortcut swallows a character you type, such as @ or an accented letter, change it.
 
-Settings > WoW lists game settings that help when you play two characters. Tick the ones
-you want, copy the commands, and paste them into WoW's chat or into a macro. Glass never
+Settings > Game lists client settings that help when you play two characters. Tick the ones
+you want, copy the commands, and paste them into the game's chat or into a macro. Glass never
 changes the game itself.
 
 
 IF SOMETHING DOESN'T WORK
 -------------------------
-* Clicks or keys do nothing: if WoW runs as administrator, Glass has to as well
+* Clicks or keys do nothing: if the game runs as administrator, Glass has to as well
   (right-click Glass.exe > Run as administrator). Glass warns you when it spots this.
 
 * Mouseover keys stopped working: use tray menu > Reinstall Keyboard Hook.
@@ -111,7 +111,7 @@ IF SOMETHING DOESN'T WORK
   inactive windows" back on. With it off, Windows sends the wheel to the game you're
   playing instead of to the mirror.
 
-* A click or key beeps and does nothing: turn off "Lock Cursor to Window" in WoW's
+* A click or key beeps and does nothing: turn off "lock cursor to window" in the game's
   options. It stops the pointer leaving the game you're playing, so Glass can't reach the
   other one, and it refuses rather than click the wrong character.
 
@@ -124,6 +124,36 @@ IF SOMETHING DOESN'T WORK
 * Tray menu > Reset Everything clears the presets and the mirror's size, position and
   opacity. To start completely fresh, quit Glass and delete
   %APPDATA%\Glass\settings.json.
+
+IS IT SAFE? WHAT GLASS DOES WITH YOUR KEYBOARD
+----------------------------------------------
+Glass watches the keyboard. It has to: that is the only way Windows lets it make "3"
+act on the character you are hovering instead of the one you are playing. So here is
+exactly what that does and doesn't mean.
+
+* Only twelve keys are ever acted on: 1 2 3 4 5 6 7 8 9 0 - =, and only while the
+  pointer is over the locked mirror. Every other key is handed straight back to
+  Windows without being looked at further.
+
+* Nothing you type is recorded. Not chat, not passwords, not your account name.
+  There is no list of keystrokes anywhere in Glass.
+
+* Nothing you type is sent anywhere. Glass makes one network request in its life: it
+  asks GitHub for the newest version number, a few seconds after it starts. Nothing
+  else. No account, no analytics, no telemetry. Start it with --no-update-check and
+  it talks to nothing at all.
+
+* Your settings and the log are files on your PC and are never uploaded. The log does
+  note which of those twelve keys Glass forwarded, as lines like "key 3 -> the game",
+  because that is the only way to work out why a key landed on the wrong character.
+  That is the only keystroke of any kind that ever reaches a file.
+
+* Nothing the mirror shows is ever saved. Frames are drawn and thrown away.
+
+All of this can be checked: Glass is open source at
+https://github.com/Ridou/glass-windows, and PRIVACY.md there names the exact file
+behind each line above.
+
 
 SENDING A REPORT
 ----------------
@@ -138,7 +168,7 @@ The Help tab shows the whole report, so you can read what you're sending. It sta
 a short "What looks wrong" list. It's also saved as Glass-report.txt on your Desktop, and
 the tray menu has Copy Report for Help too.
 
-The report holds Glass's settings, your screen layout, the WoW windows it can see and the
+The report holds Glass's settings, your screen layout, the game windows it can see and the
 recent log. It never contains anything you type in the game.
 
 If Glass won't start at all, send this file instead:

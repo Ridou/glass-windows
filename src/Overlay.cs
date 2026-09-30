@@ -311,7 +311,7 @@ namespace Glass
                     return;
                 case Native.WM_XBUTTONDOWN:
                 case Native.WM_XBUTTONDBLCLK:
-                    // Mouse 4 and 5, which MMO mice and Clique binds lean on.
+                    // Mouse 4 and 5, which MMO mice and click-cast binds lean on.
                     if (locked)
                         Route(m.LParam, (Native.HiWord(m.WParam) & Native.XBUTTON2) != 0 ? MouseButtons.XButton2 : MouseButtons.XButton1);
                     m.Result = new IntPtr(1);
@@ -327,7 +327,7 @@ namespace Glass
                     if (locked) Wheel(m);
                     return;
                 case Native.WM_MOUSEHWHEEL:
-                    // A tilt sideways. WoW binds no horizontal wheel, and passing it on as a
+                    // A tilt sideways. Games rarely bind a horizontal wheel, and passing it on as a
                     // vertical notch would fire a bind nobody pressed.
                     return;
             }

@@ -38,8 +38,7 @@ namespace Glass
     --step MS           delay between synthesized events (default 20)
     --settle MS         delay before warping back (default 40)
     --hover MS          pointer rest before a forwarded key (default 35)
-    --settings [TAB]    open Settings on launch, optionally on a tab (e.g. WoW)
-    --install-addon     install/update the GlassSetup WoW addon, then exit
+    --settings [TAB]    open Settings on launch, optionally on a tab (e.g. Game)
     --role NAME-REALM=tank|healer|dps   assign a character's role, then exit
     --list              list monitors, windows and presets, then exit
     --report            copy a help report and save it to the Desktop, then exit
@@ -183,23 +182,17 @@ namespace Glass
             var role = Arg("--role");
             if (role != null && role.Contains("="))
             {
-                var roles = Saved.WowRoles;
+                var roles = Saved.GameRoles;
                 int eq = role.IndexOf('=');
                 roles[role.Substring(0, eq)] = role.Substring(eq + 1);
-                Saved.WowRoles = roles;
+                Saved.GameRoles = roles;
                 Saved.FlushNow();
                 Say("roles: " + string.Join(", ", roles.Select(kv => kv.Key + "=" + kv.Value)));
                 return 0;
             }
 
-            if (Has("--install-addon"))
-            {
-                var (installed, failed) = Wow.InstallAddon();
-                if (installed.Count > 0) Say("installed " + Wow.AddonName + " in: " + string.Join(", ", installed));
-                if (installed.Count == 0 && failed.Count == 0) Say("no World of Warcraft install found");
-                foreach (var f in failed) Say("failed: " + f);
-                return failed.Count == 0 ? 0 : 1;
-            }
+            // --theme-sample DIR draws the look to a PNG and exits; see ThemeSample.cs.
+            if (Arg("--theme-sample") is string themeDir) return ThemeSample.Run(themeDir);
 
             // For when Glass will not run properly: the same report the Help tab makes.
             if (Has("--report")) { Say(Report.CopyAndSave()); Say(Report.FilePath); return 0; }
@@ -309,7 +302,7 @@ namespace Glass
 
             App.Defer(() =>
             {
-                // --settings [Regions|Overlay|Shortcuts|WoW]
+                // --settings [Regions|Overlay|Shortcuts|Game]
                 if (Has("--settings"))
                 {
                     var tab = Arg("--settings");

@@ -135,14 +135,27 @@ namespace Glass
                 g.Clear(Color.Transparent);
                 g.CompositingMode = CompositingMode.SourceOver;
 
+                // A strip of dark stone in a bronze rim, like an action bar, matching the
+                // settings window and the macOS build.
                 var pill = new RectangleF(0.5f, 0.5f, surface.Width - 1, surface.Height - 1);
-                using (var path = Look.RoundRect(pill, pill.Height / 2))
+                using (var path = Look.RoundRect(RectangleF.Inflate(pill, -1, -1), Px(5)))
                 {
-                    using (var bg = new SolidBrush(Color.FromArgb(184, 0, 0, 0)))       // 72% black
-                        g.FillPath(bg, path);
-                    using (var edge = new Pen(Color.FromArgb(31, 255, 255, 255), 1))    // 12% white
-                        g.DrawPath(edge, path);
+                    var state = g.Save();
+                    g.SetClip(path);
+                    using (var b = new TextureBrush(Theme.Stone, System.Drawing.Drawing2D.WrapMode.TileFlipXY))
+                    {
+                        b.TranslateTransform(-Px(300), -Px(300));
+                        g.FillPath(b, path);
+                    }
+                    using (var sheen = new LinearGradientBrush(
+                               new RectangleF(pill.X, pill.Y - 1, pill.Width, pill.Height / 2 + 1),
+                               Color.FromArgb(26, 255, 255, 255), Color.FromArgb(0, 255, 255, 255), 90f))
+                        g.FillRectangle(sheen, new RectangleF(pill.X, pill.Y, pill.Width, pill.Height / 2));
+                    g.Restore(state);
+                    using (var edge = new Pen(Theme.Bronze, 1)) g.DrawPath(edge, path);
                 }
+                using (var outer = Look.RoundRect(pill, Px(6)))
+                using (var edge = new Pen(Color.Black, 1)) g.DrawPath(edge, outer);
 
                 var center = new StringFormat { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
                 foreach (var (hit, rect) in buttons)
@@ -150,7 +163,7 @@ namespace Glass
                     if (hit == hover)
                     {
                         using (var hl = Look.RoundRect(Rectangle.Inflate(rect, Px(2), Px(1)), Px(4)))
-                        using (var b = new SolidBrush(Color.FromArgb(36, 255, 255, 255)))
+                        using (var b = new SolidBrush(Color.FromArgb(46, 255, 217, 128)))
                             g.FillPath(b, hl);
                     }
 
@@ -159,17 +172,18 @@ namespace Glass
                         string name = Saved.PresetNames[hit - Hit.Preset0];
                         bool isSet = Saved.Preset(name).HasValue;
                         bool active = Saved.ActivePreset == name;
-                        var colour = active ? Look.Green : (isSet ? Color.White : Color.FromArgb(77, 255, 255, 255));
+                        var colour = active ? Theme.Green : (isSet ? Theme.White : Theme.Grey);
                         using (var brush = new SolidBrush(colour))
                             g.DrawString(name, active ? boldFont : textFont, brush, rect, center);
                     }
                     else if (hit == Hit.Hide)
                     {
-                        g.DrawString("«", chevronFont, Brushes.White, new RectangleF(rect.X, rect.Y - Px(2), rect.Width, rect.Height), center);
+                        using (var chev = new SolidBrush(Theme.Gold))
+                            g.DrawString("«", chevronFont, chev, new RectangleF(rect.X, rect.Y - Px(2), rect.Width, rect.Height), center);
                     }
                     else
                     {
-                        var colour = hit == Hit.Lock && !Saved.Locked ? Look.Orange : Color.White;
+                        var colour = hit == Hit.Lock && !Saved.Locked ? Look.Orange : Theme.Gold;
                         using (var brush = new SolidBrush(colour))
                             g.DrawString(Glyph(hit), iconFont, brush, rect, center);
                     }
@@ -178,7 +192,7 @@ namespace Glass
                 if (!compact)
                 {
                     // The rule between the controls and the presets.
-                    using (var rule = new SolidBrush(Color.FromArgb(46, 255, 255, 255)))
+                    using (var rule = new SolidBrush(Theme.Bronze))
                         g.FillRectangle(rule, Px(82), Px(8), Math.Max(1, Px(1)), Px(14));
                 }
             }

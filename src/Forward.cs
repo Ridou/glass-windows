@@ -9,9 +9,9 @@
 //            here it is a real option. It stays off by default for clicks: a game that reads
 //            the cursor rather than the message will ignore a posted click, and failing
 //            visibly beats failing quietly on a heal. For keys it is the default, exactly as
-//            on the Mac -- HotkeyNet has sent keys to background WoW windows this way for years.
+//            on the Mac -- tools have sent keys to background game windows this way for years.
 //
-// Every button and modifier is forwarded exactly as pressed -- Clique binds spells to
+// Every button and modifier is forwarded exactly as pressed -- click-casting addons bind spells to
 // combinations like shift-right-click, so anything less than full fidelity would fire the
 // wrong spell rather than fail visibly. On the warp path modifiers need no synthesis: your
 // real Shift or Alt is physically down while the click is routed, and the target reads it
@@ -243,7 +243,7 @@ namespace Glass
         static int clipLogged;
 
         /// Put the cursor on `p` and confirm it is there. Windows clamps SetCursorPos to any
-        /// ClipCursor rectangle, and WoW's "Lock Cursor to Window" sets one around the client
+        /// ClipCursor rectangle, and a game's "lock cursor to window" option sets one around the client
         /// you are playing: the cursor would stop at its edge, and the click meant for the
         /// other character would land on this one. Better refused than delivered there.
         static bool PinTo(Point p)
@@ -315,7 +315,7 @@ namespace Glass
         /// What the last focus hand-back did, for the click's log line. Worker thread only.
         static string focusNote = "";
 
-        /// "WowClassic 4812": which client, told apart by process id, since both are WoW.
+        /// "Client 4812": which one, told apart by process id, since both are the same program.
         static string Who(IntPtr hWnd)
         {
             if (hWnd == IntPtr.Zero) return "nothing";
@@ -450,7 +450,7 @@ namespace Glass
         ///
         /// "post" (the default): the cursor still goes to the spot, so a client reading the
         /// cursor sees it on the right frame, but the button messages go straight to the covered
-        /// window. Nothing changes focus and nothing flashes. Whether WoW acts on posted clicks
+        /// window. Nothing changes focus and nothing flashes. Whether a game acts on posted clicks
         /// is the open question this mode exists to answer; keys posted this way work.
         ///
         /// "front": bring the covered window forward, click it for real, and hand focus back.
@@ -641,7 +641,7 @@ namespace Glass
 
         /// A background client's own keyboard state never saw the Shift you are holding -- it
         /// went to the window you are playing. So posted keys carry their modifiers as posted
-        /// key messages too, in press order, released in reverse, the way HotkeyNet does it.
+        /// key messages too, in press order, released in reverse, the way other forwarders do it.
         static void PostKeyWithModifiers(IntPtr hWnd, int vk, uint mods)
         {
             bool alt = (mods & Native.MOD_ALT) != 0;

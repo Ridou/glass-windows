@@ -29,10 +29,26 @@ namespace Glass
             };
             // Double-clicking the icon opens Settings: what a Dock icon does on the Mac.
             icon.MouseDoubleClick += (o, e) => { if (e.Button == MouseButtons.Left) App.ShowSettings(null); };
+            icon.BalloonTipClicked += (o, e) =>
+            {
+                var run = balloonClick;
+                balloonClick = null;
+                if (run != null) App.Defer(run);
+            };
+            icon.BalloonTipClosed += (o, e) => balloonClick = null;
         }
 
-        public void Balloon(string title, string text, ToolTipIcon kind = ToolTipIcon.Info) =>
+        /// `onClick` runs if the balloon itself is clicked. Telling someone to go and find a
+        /// button is worse than giving them the button, and a balloon is already a thing you
+        /// click. It is cleared afterwards so a later balloon cannot inherit it.
+        public void Balloon(string title, string text, ToolTipIcon kind = ToolTipIcon.Info,
+                            Action onClick = null)
+        {
+            balloonClick = onClick;
             icon.ShowBalloonTip(8000, title, text, kind);
+        }
+
+        Action balloonClick;
 
         static string Keys(Command c) => Saved.GetShortcut(c).Display;
 

@@ -1,9 +1,0 @@
-## Interface: 11509, 11600, 11601, 16001, 20506, 38002, 40402, 50504, 120007, 120100
-## Title: GlassSetup
-## Notes: Applies the WoW settings chosen in the Glass app at login, and reports them back.
-## Author: Glass
-## Version: 1
-## SavedVariables: GlassStatus
-
-Config.lua
-Core.lua

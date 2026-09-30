@@ -268,7 +268,7 @@ namespace Glass
             set => SetString("hiddenClicks", value);
         }
 
-        /// The program of the window last mirrored (WowB, WowClassic ...), for finding it again
+        /// The program of the window last mirrored, for finding it again
         /// after it restarts.
         public static string BoundExe
         {
@@ -312,15 +312,22 @@ namespace Glass
             }
         }
 
-        // MARK: - WoW
+        // MARK: - Game settings
+
+        // These were stored under "wow." before Glass stopped naming one game. Reads fall back
+        // to the old key so nobody's choices vanish on upgrade, and the next write moves them
+        // over; the fallback can go once no old settings file is likely to be left.
+        const string OldPrefix = "wow.";
+        const string Prefix = "game.";
 
         /// Most are recommended on; a few that can surprise you default off. Unticking any
-        /// of them restores Blizzard's default for that setting.
-        public static bool WowSetting(WoWSetting s) => GetBool("wow." + s.Key, s.DefaultOn);
-        public static void SetWowSetting(string key, bool on) => SetBool("wow." + key, on);
+        /// of them restores the game's own default for that setting.
+        public static bool GameSetting(GameSetting s) =>
+            GetBool(Prefix + s.Key, GetBool(OldPrefix + s.Key, s.DefaultOn));
+        public static void SetGameSetting(string key, bool on) => SetBool(Prefix + key, on);
 
         /// "Name-Realm" -> role.
-        public static Dictionary<string, string> WowRoles
+        public static Dictionary<string, string> GameRoles
         {
             get
             {
@@ -329,7 +336,9 @@ namespace Glass
                     var outv = new Dictionary<string, string>();
                     try
                     {
-                        if (d.TryGetPropertyValue("wow.roles", out var v) && v is JsonObject o)
+                        if (!d.TryGetPropertyValue(Prefix + "roles", out var v) || !(v is JsonObject))
+                            d.TryGetPropertyValue(OldPrefix + "roles", out v);
+                        if (v is JsonObject o)
                             foreach (var kv in o) outv[kv.Key] = kv.Value?.GetValue<string>() ?? "";
                     }
                     catch { }
@@ -342,7 +351,7 @@ namespace Glass
                 {
                     var o = new JsonObject();
                     foreach (var kv in value) o[kv.Key] = kv.Value;
-                    d["wow.roles"] = o;
+                    d[Prefix + "roles"] = o;
                     Flush();
                 }
             }

@@ -3,7 +3,7 @@
 //   E2E.exe drive GLASS.EXE OUTDIR     the test itself
 //   E2E.exe target NAME X Y W H LOG    a stand-in game window that logs every input it receives
 //
-// Two stand-ins play the two WoW clients. "Priest" holds the region Glass mirrors; "Warrior" is
+// Two stand-ins play the two game clients. "Priest" holds the region Glass mirrors; "Warrior" is
 // the client being played, with the overlay floating on top of it. Every check asks the same
 // question Glass exists to answer: did this input reach exactly one character, the right one,
 // at the right place?
@@ -377,7 +377,7 @@ sealed class Driver
         Check("cursor back where it was", c.X == OverlayMid.X && c.Y == OverlayMid.Y, c.X + "," + c.Y);
         FocusCheck("focus handed back to the Warrior", N.GetForegroundWindow() == warriorWnd, "fg=" + Title(N.GetForegroundWindow()));
 
-        // Shift + right click, as a Clique bind would use it.
+        // Shift + right click, as a click-cast bind would use it.
         p0 = Lines("Priest").Length;
         Move(new Point(OverlayAt.X + 10, OverlayAt.Y + 90));             // maps to 60,140
         Key(N.VK_SHIFT, false); Mouse(N.RIGHTDOWN); Thread.Sleep(40); Mouse(N.RIGHTUP); Thread.Sleep(60); Key(N.VK_SHIFT, true);
@@ -387,7 +387,7 @@ sealed class Driver
               p.Any(l => l.StartsWith("RDOWN at=60,140") && (int.Parse(l.Split("mk=")[1]) & 4) != 0), string.Join("; ", p));
         FocusCheck("focus handed back after right click", N.GetForegroundWindow() == warriorWnd, "fg=" + Title(N.GetForegroundWindow()));
 
-        // Shift still held well after the click, as a hand doing a Clique shift-click might.
+        // Shift still held well after the click, as a hand doing a click-cast shift-click might.
         IntoGame();
         Move(OverlayMid);
         Key(N.VK_SHIFT, false); Mouse(N.LEFTDOWN); Thread.Sleep(40); Mouse(N.LEFTUP); Thread.Sleep(600); Key(N.VK_SHIFT, true);
@@ -531,7 +531,7 @@ sealed class Driver
 
     void ClipTest()
     {
-        // The game you are playing locks the cursor to its window, as WoW's "Lock Cursor to
+        // The game you are playing locks the cursor to its window, as a "lock cursor to
         // Window" does. Glass cannot reach the other client and must refuse, not click here.
         IntoGame();
         var clip = new N.RECT { L = WarriorRect.Left, T = WarriorRect.Top, R = WarriorRect.Right, B = WarriorRect.Bottom };
@@ -623,7 +623,7 @@ sealed class Driver
 
     void SecondLaunchTest()
     {
-        var second = Process.Start(new ProcessStartInfo(glass, "--settings WoW") { UseShellExecute = false });
+        var second = Process.Start(new ProcessStartInfo(glass, "--settings Game") { UseShellExecute = false });
         bool exited = second.WaitForExit(20000);
         Check("second launch hands over and exits", exited && second.ExitCode == 0, exited ? "exit " + second.ExitCode : "still running");
         var settings = WaitWindow("Glass Settings", 8000);

@@ -1,8 +1,8 @@
 #!/bin/sh
-# Diff the Windows build's WoW output (console commands, macro chunks, Config.lua) against the
+# Diff the Windows build's console output (commands and macro chunks) against the
 # macOS build's, compiled from the real sources. Expect "BYTE-IDENTICAL".
-# harness.swift embeds the WoW code cut from the Mac build's glass.swift (Ridou/glass) at the
-# time it was made; regenerate it if that WoW section changes (see HANDOFF.md, Toolchain).
+# harness.swift embeds the settings code cut from the Mac build's glass.swift (Ridou/glass) at the
+# time it was made; regenerate it if that section changes (see HANDOFF.md, Toolchain).
 set -e
 cd "$(dirname "$0")"
 export DOTNET_ROOT="$HOME/.dotnet" PATH="$HOME/.dotnet:$PATH" DOTNET_CLI_TELEMETRY_OPTOUT=1 DOTNET_NOLOGO=1

@@ -1,6 +1,6 @@
 // Capturing one window, even while another window covers it.
 //
-// On one monitor both WoW clients fill the same screen, so a BitBlt of the desktop only ever
+// On one monitor both game clients fill the same screen, so a BitBlt of the desktop only ever
 // sees the one in front. Windows.Graphics.Capture reads a window's own image from the
 // compositor instead -- what OBS's "Windows 10 (1903 and up)" window capture uses -- so the
 // Priest's frames can be mirrored while the Warrior is played full screen on top.

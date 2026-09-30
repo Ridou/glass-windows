@@ -2,8 +2,9 @@
 //
 // Settings > Help > Copy Report, the tray's "Copy Report for Help", or Glass.exe --report. It
 // goes on the clipboard and into Glass-report.txt on the Desktop, so it can be pasted into a
-// message or attached as a file. It holds Glass's settings, the screen layout, the WoW clients
-// it can see and the recent log -- never anything typed in the game, which the log never has.
+// message or attached as a file. It holds Glass's settings, the screen layout, the game clients
+// it can see and the recent log. Nothing typed appears in it, beyond which of the number-row
+// keys Glass itself forwarded and to which client -- that is all the log ever holds.
 
 using System;
 using System.Collections.Generic;
@@ -112,7 +113,7 @@ namespace Glass
                 Line("  keyboard: " + lang.LayoutName + " (" + lang.Culture.Name + ")");
             });
 
-            Head("WoW clients");
+            Head("Game clients");
             Try(() =>
             {
                 int n = 0;
@@ -121,7 +122,7 @@ namespace Glass
                     Native.GetWindowThreadProcessId(h, out uint pid);
                     var path = Wnd.ProcessPath(pid) ?? "";
                     var name = Path.GetFileNameWithoutExtension(path);
-                    if (!name.StartsWith("Wow", StringComparison.OrdinalIgnoreCase)) continue;
+                    if (!LooksLikeClient(name, h)) continue;
                     n++;
                     Native.GetWindowRect(h, out RECT wr);
                     var b = wr.ToRectangle();
@@ -184,6 +185,21 @@ namespace Glass
         }
 
         /// Plain-English problems, from the live state and the recent log, most serious first.
+        /// Which windows to report as game clients. Glass is not tied to one game, so there is
+        /// no list of executable names: it reports the program you pointed it at, and failing
+        /// that any window big enough to be a game, which is what a reader of this needs to see.
+        static bool LooksLikeClient(string exeName, IntPtr window)
+        {
+            if (string.IsNullOrEmpty(exeName)) return false;
+            if (string.Equals(exeName, "Glass", StringComparison.OrdinalIgnoreCase)) return false;
+            var bound = Saved.BoundExe;
+            if (!string.IsNullOrEmpty(bound))
+                return string.Equals(exeName, bound, StringComparison.OrdinalIgnoreCase);
+            Native.GetWindowRect(window, out RECT r);
+            var b = r.ToRectangle();
+            return b.Width >= 640 && b.Height >= 480;
+        }
+
         static List<string> Findings(List<string> log)
         {
             var f = new List<string>();
@@ -208,19 +224,19 @@ namespace Glass
                 {
                     Native.GetWindowThreadProcessId(h, out uint pid);
                     var name = Path.GetFileNameWithoutExtension(Wnd.ProcessPath(pid) ?? "");
-                    if (name.StartsWith("Wow", StringComparison.OrdinalIgnoreCase) && Wnd.IsElevated(pid))
-                    { f.Add("WoW runs as administrator but Glass doesn't, so Windows blocks Glass's clicks and keys. Run Glass as administrator too."); break; }
+                    if (LooksLikeClient(name, h) && Wnd.IsElevated(pid))
+                    { f.Add("The game runs as administrator but Glass doesn't, so Windows blocks Glass's clicks and keys. Run Glass as administrator too."); break; }
                 }
             if (App.Hotkeys != null && !Hooks.Installed) f.Add("The keyboard hook isn't installed, so number keys over the mirror can't work.");
             if (App.Overlay != null && !App.Overlay.IsDisposed && App.Capture.Frames == 0)
-                f.Add("The mirror has never received a picture. Is WoW in Windowed (Fullscreen) mode?");
+                f.Add("The mirror has never received a picture. Is the game in Windowed (Fullscreen) mode?");
             if (App.Overlay != null && !App.Overlay.IsDisposed && !Saved.Locked) f.Add("The mirror is UNLOCKED, so clicks don't go through. Ctrl+Alt+L locks it.");
             if (App.Overlay != null && !App.Overlay.IsDisposed && !App.Overlay.Visible) f.Add("The mirror is hidden. Ctrl+Alt+H shows it.");
             if (Native.SystemParametersInfo(Native.SPI_GETMOUSEWHEELROUTING, 0, out uint routing, 0) && routing != Native.MOUSEWHEEL_ROUTING_MOUSE_POS)
                 f.Add("\"Scroll inactive windows\" is off in Windows, so the wheel over the mirror goes to the game you're playing.");
             var taken = App.Hotkeys?.Taken ?? "";
             if (taken.Length > 0) f.Add("Another program owns these shortcuts, so they don't work: " + taken + ".");
-            From("could not reach", "The pointer couldn't reach the other game, and Glass refused the input. Is \"Lock Cursor to Window\" on in WoW?");
+            From("could not reach", "The pointer couldn't reach the other game, and Glass refused the input. Is \"lock cursor to window\" on in the game?");
             From("covers what it mirrors", "The mirror was sitting on top of the area it shows, so clicks were refused.");
             From("FAILED", "Focus didn't come back to the game being played after a click or key.");
             From("never took focus", "A clicked game window was slow to take focus.");

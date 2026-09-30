@@ -9,7 +9,7 @@
 //     WDA_EXCLUDEFROMCAPTURE removes Glass's windows from every capture path, and the
 //     overlay is also a layered window, which a plain SRCCOPY skips anyway.
 //   * A game in exclusive full screen is not composited, so there is nothing to read.
-//     WoW must be in Windowed (Fullscreen). This is the one real behavioural difference
+//     The game must be in Windowed (Fullscreen). This is the one real behavioural difference
 //     from the Mac build and it is called out in the README.
 //
 // The captured pixels stay in a DIB that the overlay blits straight out of. Nothing is
@@ -51,7 +51,7 @@ namespace Glass
         Rectangle crop;
         long lastWindowFrame;
 
-        /// "the screen" or "window WowB 1492", for the report.
+        /// "the screen" or "window Client 1492", for the report.
         public string Method { get; private set; } = "none";
         /// Why window capture was not used, if it was asked for and failed.
         public string WindowProblem { get; private set; }
@@ -219,7 +219,7 @@ namespace Glass
                 if (Environment.TickCount64 - lastWindowFrame > 10000 && !loggedFormat)
                 {
                     loggedFormat = true;     // reused as "said so once"
-                    Log.Write("capture: no picture from the window for 10s (minimised? WoW skips drawing when minimised)");
+                    Log.Write("capture: no picture from the window for 10s (minimised? many games skip drawing when minimised)");
                 }
                 return;
             }

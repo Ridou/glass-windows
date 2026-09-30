@@ -2,7 +2,7 @@
 //
 // Two rules hold throughout, both learned on the macOS side and both true here:
 //   * Never send a *blocking* message to the game. SendMessage waits for the target's message
-//     pump; WoW does not always answer promptly. PostMessage only. The one SendMessage below
+//     pump; a game does not always answer promptly. PostMessage only. The one SendMessage below
 //     goes to Glass's own overlay, to start a window drag.
 //   * Anything slow runs off the threads that service input. The keyboard hook has a thread
 //     of its own that does nothing else, because Windows silently removes a hook whose

@@ -1,7 +1,7 @@
 // Glass.exe --selftest DIR
 //
 // Builds every window Glass has and draws each to a PNG in DIR without putting anything on
-// screen, and writes out the WoW command text, so a build can be checked on a machine that is
+// screen, and writes out the console command text, so a build can be checked on a machine that is
 // not set up to play. It registers no hotkeys and captures nothing.
 
 using System;
@@ -37,20 +37,19 @@ namespace Glass
 
             Check("windows", () => report.Add("        " + Wnd.AllOrdinary().Count + " ordinary windows"));
 
-            Check("wow commands", () =>
+            Check("game commands", () =>
             {
-                foreach (var (name, list) in new[] { ("Everyone", Wow.Shared) }
-                         .Concat(WoWRoles.All.Select(r => (WoWRoles.Title(r), Wow.For(r)))))
+                foreach (var (name, list) in new[] { ("Everyone", Game.Shared) }
+                         .Concat(GameRoles.All.Select(r => (GameRoles.Title(r), Game.For(r)))))
                 {
-                    var lines = Wow.ConsoleCommands(list);
-                    File.WriteAllLines(Path.Combine(dir, "wow-" + name + ".txt"), lines);
-                    File.WriteAllText(Path.Combine(dir, "wow-" + name + "-macros.txt"),
-                                      string.Join("\n\n---\n\n", Wow.MacroChunks(lines)));
-                    if (Wow.MacroChunks(lines).Any(c => c.Length > 255)) throw new Exception("macro over 255");
+                    var lines = Game.ConsoleCommands(list);
+                    File.WriteAllLines(Path.Combine(dir, "game-" + name + ".txt"), lines);
+                    File.WriteAllText(Path.Combine(dir, "game-" + name + "-macros.txt"),
+                                      string.Join("\n\n---\n\n", Game.MacroChunks(lines)));
+                    if (Game.MacroChunks(lines).Any(c => c.Length > 255)) throw new Exception("macro over 255");
                 }
             });
 
-            Check("addon config", () => File.WriteAllText(Path.Combine(dir, "Config.lua"), Wow.AddonConfigLua()));
 
             Check("shortcuts", () =>
             {
@@ -147,6 +146,9 @@ namespace Glass
             {
                 g.Clear(root.BackColor);
                 var all = new Rectangle(Point.Empty, root.ClientSize);
+                // A window that draws its own chrome paints before its children do; without
+                // this the picture would be missing the frame the person actually sees.
+                (root as IChrome)?.PaintChrome(g);
                 foreach (var c in root.Controls.Cast<Control>().Reverse()) Draw(g, root, c, all);
             }
             return bmp;
@@ -156,13 +158,19 @@ namespace Glass
         /// say: which control covers which, and what was cut short.
         static List<string> Layout(Control root)
         {
+            string Pad(string s2) => string.IsNullOrEmpty(s2) ? "" : "  " + s2;
             var lines = new List<string> { "dpi " + root.DeviceDpi + "  client " + root.ClientSize.Width + "x" + root.ClientSize.Height };
             void Walk(Control c, int depth)
             {
                 if ((Native.GetWindowLong(c.Handle, Native.GWL_STYLE) & Native.WS_VISIBLE) == 0) return;
                 var r = root.RectangleToClient(c.Parent.RectangleToScreen(c.Bounds));
                 var text = c.Text.Length > 40 ? c.Text.Substring(0, 40) + "…" : c.Text;
-                var want = c is Label l && !l.AutoSize ? "  needs " + TextRenderer.MeasureText(c.Text, c.Font).Width : "";
+                // A themed label knows what it needs in the font it is really drawn in, and
+                // whether it wraps; TextRenderer against the inherited font would call every
+                // wrapped paragraph too narrow and miss the ones that are genuinely cut off.
+                var want = c is ThemeLabel tl ? Pad(tl.Overflow())
+                         : c is Label l && !l.AutoSize ? "  needs " + TextRenderer.MeasureText(c.Text, c.Font).Width
+                         : "";
                 lines.Add(string.Format("{0}{1} {2},{3} {4}x{5}  \"{6}\"{7}", new string(' ', depth * 2), c.GetType().Name,
                                         r.X, r.Y, r.Width, r.Height, text.Replace("\n", " "), want));
                 foreach (Control child in c.Controls) Walk(child, depth + 1);
