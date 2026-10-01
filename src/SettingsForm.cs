@@ -62,8 +62,6 @@ namespace Glass
 
         const int W = 760;         // usable page width at 96 dpi
 
-        static readonly Color Secondary = Color.FromArgb(96, 96, 96);
-        static readonly Color Tertiary = Color.FromArgb(128, 128, 128);
 
         public SettingsForm()
         {
@@ -238,7 +236,7 @@ namespace Glass
         }
 
         ThemeLabel Hint(Control parent, string text, int x, int y, int w, int h = 32) =>
-            Text_(parent, text, x, y, w, h, false, 8f, Tertiary);
+            Text_(parent, text, x, y, w, h, false, 8f, Theme.Hint);
 
         /// Grey unless asked otherwise: red is for the one action a page is really about,
         /// and a page of red buttons says nothing about which of them matters.
@@ -298,35 +296,51 @@ namespace Glass
         {
             var v = regionsPage;
             Text_(v, "Record a region for each group size, then switch between them in one click.",
-                  16, 14, W - 32, 20, false, 9f, Secondary);
+                  16, 14, W - 32, 20, false, 9f, Theme.Body);
 
-            int y = 48;
+            int y = 48, index = 0;
             foreach (var name in Saved.PresetNames)
             {
                 var n = name;
-                Text_(v, n, 16, y, 60, 22, true, 11f);
-                presetLabels[n] = Text_(v, "", 16, y + 24, 360, 18, false, 8.5f, Secondary);
-                presetLabels[n].Font = new Font("Consolas", 8.5f);
-                presetUse[n] = Btn(v, "Use", W - 250, y + 6, 64, () => App.UsePreset(n));
-                Btn(v, "Record…", W - 178, y + 6, 96, () => App.RecordPreset(n), primary: true);
-                Btn(v, "Clear", W - 74, y + 6, 72, () => { App.ClearPreset(n); RefreshAll(); });
+                // Every other row stands on a tinted band, as the game's own lists do. The
+                // band is a container, so the row's controls are placed inside it and their
+                // x and y come back by the band's own offset.
+                Control row = v;
+                int ox = 0, oy = y;
+                if (index++ % 2 == 0)
+                {
+                    var band = new ThemeBand { Location = new Point(8, y - 6), Size = new Size(W - 16, 52) };
+                    v.Controls.Add(band);
+                    row = band; ox = 8; oy = 6;
+                }
+                Text_(row, n, 16 - ox, oy, 60, 22, true, 11f);
+                presetLabels[n] = Text_(row, "", 16 - ox, oy + 24, 360, 18, false, 8.5f, Theme.Hint);
+                presetLabels[n].TextFont = Theme.Narrow(10f);
+                presetUse[n] = Btn(row, "Use", W - 250 - ox, oy + 6, 64, () => App.UsePreset(n));
+                Btn(row, "Record…", W - 178 - ox, oy + 6, 96, () => App.RecordPreset(n), primary: true);
+                Btn(row, "Clear", W - 74 - ox, oy + 6, 72, () => { App.ClearPreset(n); RefreshAll(); });
                 y += 58;
             }
 
             // One monitor: mirror a game window, which keeps showing while another covers it.
             int m = 300;
             Text_(v, "What the mirror shows", 16, m, 300, 22, true, 9.5f);
-            mirrorModes = Choice(v, 16, m + 26, 160, new[] { "The game window", "The screen" }, i =>
+            mirrorModes = Choice(v, 16, m + 26, 186, new[] { "The game window", "The screen" }, i =>
             {
                 Saved.MirrorMode = new[] { "window", "screen" }[i];
                 var r = Saved.Region;
                 if (r.HasValue && App.Overlay != null) App.Begin(r.Value, Saved.ActivePreset);
                 RefreshAll();
+            },
+            new (PlateGlyph, Color)?[]
+            {
+                (PlateGlyph.Window, Theme.Rgb(0.20, 0.46, 0.30)),
+                (PlateGlyph.Display, Theme.Rgb(0.16, 0.36, 0.58)),
             });
             Hint(v, "The game window keeps showing even while another window covers it: two clients on one monitor, "
                     + "switching with Alt+Tab. Pick the region while that client is in front. The screen shows "
                     + "whatever is at that spot, such as a client on another monitor.", 16, m + 60, W - 32, 32);
-            mirrorStatus = Text_(v, "", 16, m + 96, W - 32, 18, false, 8.5f, Secondary);
+            mirrorStatus = Text_(v, "", 16, m + 96, W - 32, 18, false, 8.5f, Theme.Yellow);
 
             int c = m + 128;
             Text_(v, "Clicks on a covered window", 16, c, 300, 22, true, 9.5f);
@@ -346,7 +360,8 @@ namespace Glass
         /// A row of toggle-style radio buttons; `picked` gets the index clicked.
         /// Each row sits in a panel of its own: radio buttons sharing a container are one group,
         /// and choosing in one row would clear the other.
-        ThemePlate[] Choice(Control parent, int x, int y, int w, string[] labels, Action<int> picked)
+        ThemePlate[] Choice(Control parent, int x, int y, int w, string[] labels, Action<int> picked,
+                            (PlateGlyph glyph, Color hue)?[] icons = null)
         {
             var row = new ThemePanel { Location = new Point(x, y), Size = new Size(labels.Length * (w + 4), 28) };
             parent.Controls.Add(row);
@@ -359,6 +374,11 @@ namespace Glass
                     Text = labels[i], Appearance = Appearance.Button, TextAlign = ContentAlignment.MiddleCenter,
                     Location = new Point(i * (w + 4), 0), Size = new Size(w, 28), UseVisualStyleBackColor = true,
                 };
+                if (icons != null && i < icons.Length && icons[i] != null)
+                {
+                    r.Icon = icons[i].Value.glyph;
+                    r.IconHue = icons[i].Value.hue;
+                }
                 r.CheckedChanged += (o, e) => { if (!refreshing && r.Checked) picked(index); };
                 row.Controls.Add(r);
                 buttons[i] = r;
@@ -505,7 +525,7 @@ namespace Glass
                     + "up. Windows does not do this, so leave it off unless you are comparing.", 82, y, W - 100);
             y += 44;
 
-            overlayStatus = Text_(v, "", 16, y, W - 32, 36, false, 8.5f, Secondary);
+            overlayStatus = Text_(v, "", 16, y, W - 32, 36, false, 8.5f, Theme.Yellow);
         }
 
         // MARK: - Shortcuts tab
@@ -514,7 +534,7 @@ namespace Glass
         {
             var v = shortcutsPage;
             Text_(v, "These work anywhere, including in-game. Click one, then press new keys.",
-                  16, 14, W - 32, 20, false, 9f, Secondary);
+                  16, 14, W - 32, 20, false, 9f, Theme.Body);
 
             int y = 50;
             foreach (var command in Commands.All)
@@ -638,7 +658,7 @@ namespace Glass
 
             gameBanner = Text_(v, "Tick what you want, then copy. Glass does not touch the game — paste these into chat "
                                  + "yourself, one line at a time, or into a macro (macros take several lines).",
-                              16, 48, W - 32, 36, false, 8.5f, Secondary);
+                              16, 48, W - 32, 36, false, 8.5f, Theme.Body);
 
             // Not anchored: the page is still at its default 200×100 when this is added, so an
             // anchor would grow the list by the whole difference and push it over the buttons.
@@ -844,7 +864,7 @@ namespace Glass
             Btn(v, "Quit Glass", W - 150, 112, 150, App.Quit, 32);
             helpStatus = Text_(v, "The report holds Glass's settings, your screen layout, the game windows it can see and the "
                                   + "recent log. Nothing you type is in it, bar the 1-0 keys Glass forwarded.",
-                               16, 148, W - 32, 34, false, 8.5f, Tertiary);
+                               16, 148, W - 32, 34, false, 8.5f, Theme.Hint);
 
             versionLabel = Text_(v, "", 16, 192, 420, 20, false, 9f);
             // The Store build updates itself through the Store, so it offers neither button:

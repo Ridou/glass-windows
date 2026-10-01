@@ -30,7 +30,7 @@ GitHub, and the old copy is deleted.
 | 13 | First live report: one monitor | ✅ session 5 | Friend's report: one 3440x1440 monitor, two WowB clients stacked, Alt+Tab. Window mode built (1.1.0) |
 | 14 | Live test of window mode | ⏳ the friend | Needs Windows and two game clients. Ask for `Glass.log` back |
 | 15 | Ship the look | ✅ session 9 | 1.3.0 tagged; the theme had been on `main` unreleased since `a1cf9bd` |
-| 16 | Polish the look to match the Mac | ⏳ | Seven items in "The look, measured against the Mac" below |
+| 16 | Polish the look to match the Mac | ✅ session 9 | 1.3.1; three real gaps fixed, four claims disproved by measuring |
 
 Zip SHA-256 of the exe inside: `f0a3c330b6ea0e6c35c77bfe6230686d43ec2232e1deaf0c46c159f238056290` (session 4, with the Help tab).
 If you change any source, republish and rezip; the zip is only as fresh as its last build.
@@ -72,6 +72,65 @@ If you change any source, republish and rezip; the zip is only as fresh as its l
    - capture on a real GPU: that frames arrive (`capture format BGRA32`), and that the mirror
      leaves itself out (`could not exclude` must not appear);
    - mixed DPI across two monitors, and the wheel with "Scroll inactive windows" on.
+
+## What session 9 did, part two (1.3.1: polish measured against the Mac)
+
+**Lesson: measure the look, do not eyeball it.** Of seven differences written down from a
+side-by-side read of the two renders, sampling the pixels disproved four. Converting both PNGs
+with `sips -s format bmp` and reading them with a twenty-line BMP reader settled every one of
+them in seconds. Do that before changing a colour.
+
+| Claimed from the screenshots | Measured | Verdict |
+|---|---|---|
+| Windows marble is washed out | Mac content lum 47.5, Windows 43.8 | **False** -- Windows is darker |
+| Body and hint text too dim | intro fg rgb(95,94,94) vs the Mac's rgb(235,230,217); contrast 2.98 vs 10.10 | **True**, and the worst of them |
+| No alternating row bands | flat: banded row rgb(47,39,29) = plain row | **True** |
+| Inset border too faint | both call the same `DrawInset` from the window chrome | **False** -- a 1x vs 2x artifact |
+| Plates carry no icons | the Mac passes two SF Symbols, Windows passes none | **True** |
+| Selected side tab barely differs | Windows delta +21.8 lum, the Mac's **-3.9** | **False** -- Windows separates them *better* |
+| Heading undersized | Windows 4.99% of window height, the Mac 3.00% | **False** -- Windows is larger |
+
+### What was actually fixed
+
+1. **The text colours were never moved onto the palette.** `SettingsForm` still held
+   `Secondary = (96,96,96)` and `Tertiary = (128,128,128)` from before the look landed, so every
+   explanation on every page drew in flat grey at about a third of the Mac's contrast. Both
+   constants are gone; each call site now names the role it wants -- `Theme.Body` for page
+   prose, `Theme.Hint` for the quieter line under a control, `Theme.Yellow` for the live status
+   lines (the Mac uses `WoW.yellow` for both the mirror and overlay status).
+   - Intro line contrast **2.98 -> 6.82**, colour now rgb(230,225,213) against the Mac's
+     rgb(235,230,217). The rest of the gap is 1x antialiasing against the Mac's 2x, not colour.
+   - Found on the way: `presetLabels[n].Font = new Font("Consolas", …)` did nothing at all --
+     `ThemeLabel` paints with `TextFont`, never `Font`. It is `Theme.Narrow` now, as the Mac is.
+2. **Row bands.** `ThemeBand` was fully written and never used. It could not simply go *behind*
+   a row either: every themed control paints its own stretch of marble through
+   `Backdrop.Paint`, so a band underneath is painted straight over by each label and button.
+   - `ThemeBand` is a `Panel` now and the row's controls go **inside** it, and `Backdrop.Paint`
+     re-applies the tint for anything nested in one. So the row reads as a single band however
+     many controls stand on it.
+   - It must never be `Enabled = false` again: that would disable the whole row.
+   - Banded row is now rgb(61,48,29) -- **pixel-identical to the Mac**.
+3. **Plate icons.** The Mac's mirror choice carries `display` (blue) and `macwindow` (green).
+   Windows has no SF Symbols, so `PlateGlyph` and `ThemeArt.DrawTile` draw the two to the same
+   reading, on the same ground and bevel as a macro icon. Nested figures on the default
+   alternate fill give a window frame with a solid title bar in one path the gradient crosses.
+   - **Gotcha:** measure a plate's label with `Theme.Measure`, which uses the same
+     `StringFormat` the text is drawn with. Measuring with `GenericTypographic` under-measures
+     and the label is silently trimmed to an ellipsis ("The game windo").
+
+Verified: build 0/0, `--selftest ALL PASSED`, no `CLIPPED` in any `settings-*.txt`, and
+`tools/e2e/run.sh` **screen, window and window-front all passed** -- which matters here, because
+the preset buttons now sit inside a container that did not exist before.
+
+**None of this ports back to the Mac**; it is Windows catching up to a look the Mac already had.
+
+### Working on the look from a Mac
+
+Both sides render headless, with no Windows machine and no game running:
+
+    /Applications/Glass.app/Contents/MacOS/Glass --snapshot DIR     # the reference
+    tools/wine.sh 240 dist/Glass/Glass.exe --selftest DIR           # every settings page
+    tools/wine.sh 120 dist/Glass/Glass.exe --theme-sample DIR       # just the primitives
 
 ## What session 9 did (1.3.0: release the look that was never released)
 

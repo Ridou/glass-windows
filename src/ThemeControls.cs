@@ -32,8 +32,23 @@ namespace Glass
             return new Point(x, y);
         }
 
-        public static void Paint(Control c, Graphics g, Bitmap tex = null) =>
+        public static void Paint(Control c, Graphics g, Bitmap tex = null)
+        {
             Theme.Fill(g, tex ?? Theme.Marble, c.ClientRectangle, Origin(c));
+            // A row band has to tint what is standing on it too, not just the gaps between.
+            // Every themed control paints its own stretch of marble, so a band merely behind
+            // the row would be painted straight over by each label and button on it.
+            int dx = 0, dy = 0;
+            for (var w = c; w != null && !(w is Form); w = w.Parent)
+            {
+                if (w is ThemeBand band)
+                {
+                    ThemeBand.Tint(g, new RectangleF(-dx, -dy, band.Width, band.Height), c.ClientRectangle);
+                    return;
+                }
+                dx += w.Left; dy += w.Top;
+            }
+        }
     }
 
     public class ThemeLabel : Label
@@ -255,6 +270,10 @@ namespace Glass
     public class ThemePlate : RadioButton
     {
         public Font TextFont = Theme.F(10);
+        /// A plate may carry a small tinted tile to the left of its label, as the Mac's
+        /// segmented control does. Null leaves the label centred on its own.
+        public PlateGlyph? Icon;
+        public Color IconHue = Theme.Rgb(0.16, 0.36, 0.58);
         bool hover;
 
         public ThemePlate()
@@ -296,9 +315,26 @@ namespace Glass
                 using (var q = Theme.Round(RectangleF.Inflate(ClientRectangle, -0.5f, -0.5f), 4)) g.DrawPath(pen, q);
                 using (var pen = new Pen(Checked ? Theme.Lit : Theme.Edge)) g.DrawPath(pen, p);
             }
-            Theme.DrawText(g, Text, TextFont,
-                           Checked ? Theme.Gold : hover ? Theme.White : Color.FromArgb(179, Theme.Body),
-                           ClientRectangle, StringAlignment.Center);
+            var tint = Checked ? Theme.Gold : hover ? Theme.White : Color.FromArgb(179, Theme.Body);
+            if (Icon == null)
+            {
+                Theme.DrawText(g, Text, TextFont, tint, ClientRectangle, StringAlignment.Center);
+                return;
+            }
+            // Icon and label are centred as one piece, so the pair sits where the label
+            // alone would have.
+            float side = ClientRectangle.Height - 6;
+            // Measured the same way it is drawn. Anything tighter -- GenericTypographic, say --
+            // under-measures, and the label is then quietly trimmed to an ellipsis.
+            float textW = Math.Min(Theme.Measure(g, Text, TextFont, int.MaxValue, false).Width,
+                                   ClientRectangle.Width - side - 13);
+            float x = ClientRectangle.X + (ClientRectangle.Width - (textW + side + 7)) / 2;
+            ThemeArt.DrawTile(g, Icon.Value, IconHue,
+                              new RectangleF((float)Math.Round(x), (float)Math.Round(ClientRectangle.Y + (ClientRectangle.Height - side) / 2), side, side),
+                              !Checked);
+            Theme.DrawText(g, Text, TextFont, tint,
+                           new RectangleF(x + side + 7, ClientRectangle.Y, textW + 2, ClientRectangle.Height),
+                           StringAlignment.Near);
         }
     }
 
@@ -489,31 +525,41 @@ namespace Glass
         }
     }
 
-    /// A band behind a list row, alternating the way a game's lists do.
-    public class ThemeBand : Control
+    /// A band behind a list row, alternating the way a game's lists do. It is a container,
+    /// not a backdrop: the row's labels and buttons go *inside* it, and `Backdrop.Paint`
+    /// re-applies the tint for each of them, so one row reads as a single continuous band
+    /// however many controls stand on it. It cannot be disabled, or the row would be too.
+    public class ThemeBand : Panel
     {
         public ThemeBand()
         {
             SetStyle(ControlStyles.AllPaintingInWmPaint | ControlStyles.UserPaint
                      | ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
-            Enabled = false;                                  // never takes a click
         }
 
-        protected override void OnPaint(PaintEventArgs e)
+        /// The tint, in the coordinates of whoever is painting. `span` is the whole band in
+        /// that control's space, so a child gets exactly the gradient the band would have
+        /// drawn there, clipped to the part of it the child covers.
+        public static void Tint(Graphics g, RectangleF span, Rectangle clip)
         {
-            var g = e.Graphics;
-            Backdrop.Paint(this, g);
             var c = Color.FromArgb(128, Theme.Row);
-            using (var b = new LinearGradientBrush(new RectangleF(-1, 0, Width + 2, Math.Max(1, Height)),
-                                                   Color.Transparent, Color.Transparent, 0f))
+            using (var b = new LinearGradientBrush(
+                       new RectangleF(span.X - 1, span.Y, Math.Max(1, span.Width + 2), Math.Max(1, span.Height)),
+                       Color.Transparent, Color.Transparent, 0f))
             {
                 b.InterpolationColors = new ColorBlend(4)
                 {
                     Colors = new[] { Color.FromArgb(0, Theme.Row), c, c, Color.FromArgb(0, Theme.Row) },
                     Positions = new[] { 0f, 0.08f, 0.92f, 1f },
                 };
-                g.FillRectangle(b, ClientRectangle);
+                g.FillRectangle(b, clip);
             }
+        }
+
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            Backdrop.Paint(this, e.Graphics);     // marble, then its own tint
+            base.OnPaint(e);
         }
     }
 

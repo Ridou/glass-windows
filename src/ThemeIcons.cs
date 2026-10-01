@@ -16,6 +16,11 @@ namespace Glass
 {
     public enum MacroIcon { Spyglass, Orb, Key, Scroll, Tome }
 
+    /// The glyphs that sit on a choice plate. The macOS build takes these from SF Symbols
+    /// ("display" and "macwindow"); Windows ships nothing equivalent, so they are drawn to
+    /// the same reading: a monitor on a stand, and a window with its title bar filled in.
+    public enum PlateGlyph { Display, Window }
+
     public static partial class ThemeArt
     {
         static Color Ground(MacroIcon k)
@@ -73,6 +78,89 @@ namespace Glass
             g.Restore(state);
             using (var pen = new Pen(Color.Black))
                 g.DrawRectangle(pen, r.X - 0.5f, r.Y - 0.5f, r.Width, r.Height);
+        }
+
+        /// A small tinted tile with a gold glyph on it: the counterpart of the macOS build's
+        /// `WoW.drawIcon(_:hue:in:dim:)`. Same ground, same bevel and the same `dim` wash as a
+        /// macro icon, but carrying a plain symbol rather than a painted object.
+        public static void DrawTile(Graphics g, PlateGlyph glyph, Color hue, RectangleF r, bool dim)
+        {
+            var state = g.Save();
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.SetClip(r);
+
+            var bright = Blend(hue, Color.White, 0.35);
+            var deep = Blend(hue, Color.Black, 0.72);
+            using (var p = new GraphicsPath())
+            {
+                p.AddEllipse(RectangleF.Inflate(r, r.Width * 0.30f, r.Height * 0.30f));
+                using (var b = new PathGradientBrush(p))
+                {
+                    b.CenterPoint = new PointF(r.X + r.Width * 0.35f, r.Y + r.Height * 0.30f);
+                    b.CenterColor = bright;
+                    b.SurroundColors = new[] { Color.Black };
+                    b.InterpolationColors = new ColorBlend(4)
+                    {
+                        Colors = new[] { Color.Black, deep, hue, bright },
+                        Positions = new[] { 0f, 0.22f, 0.7f, 1f },
+                    };
+                    g.FillRectangle(b, r);
+                }
+            }
+
+            using (var path = GlyphPath(glyph, r))
+            {
+                // The drop shadow is most of why a gold glyph reads as gold and not as yellow.
+                var t = g.Save();
+                g.TranslateTransform(0, Math.Max(1f, r.Height * 0.05f));
+                using (var sh = new SolidBrush(Color.FromArgb(200, 0, 0, 0))) g.FillPath(sh, path);
+                g.Restore(t);
+                Theme.FillDown(g, path, Theme.GoldMetal);
+                using (var pen = new Pen(Color.FromArgb(180, 0, 0, 0), Math.Max(0.6f, r.Width * 0.022f)))
+                    g.DrawPath(pen, path);
+            }
+
+            g.ResetClip();
+            Theme.Bevel(g, r, dim);
+            g.Restore(state);
+            using (var pen = new Pen(Color.Black))
+                g.DrawRectangle(pen, r.X - 0.5f, r.Y - 0.5f, r.Width, r.Height);
+        }
+
+        /// Nested figures on the default alternate fill: the outer shape is solid, the one
+        /// inside it is a hole, and anything inside *that* is solid again. So a window comes
+        /// out as a frame with its title bar filled, in one path the gradient can cross.
+        static GraphicsPath GlyphPath(PlateGlyph glyph, RectangleF r)
+        {
+            var p = new GraphicsPath();
+            RectangleF Box(float fx, float fy, float fw, float fh) =>
+                new RectangleF(r.X + r.Width * fx, r.Y + r.Height * fy, r.Width * fw, r.Height * fh);
+
+            if (glyph == PlateGlyph.Display)
+            {
+                using (var outer = Theme.Round(Box(0.12f, 0.20f, 0.76f, 0.50f), r.Width * 0.08f))
+                using (var inner = Theme.Round(Box(0.20f, 0.28f, 0.60f, 0.34f), r.Width * 0.04f))
+                {
+                    p.AddPath(outer, false);
+                    p.AddPath(inner, false);
+                }
+                p.AddRectangle(Box(0.44f, 0.70f, 0.12f, 0.08f));          // neck
+                using (var foot = Theme.Round(Box(0.28f, 0.78f, 0.44f, 0.07f), r.Width * 0.03f))
+                    p.AddPath(foot, false);
+            }
+            else
+            {
+                using (var outer = Theme.Round(Box(0.12f, 0.18f, 0.76f, 0.64f), r.Width * 0.08f))
+                using (var inner = Theme.Round(Box(0.19f, 0.25f, 0.62f, 0.50f), r.Width * 0.04f))
+                using (var bar = new GraphicsPath())
+                {
+                    p.AddPath(outer, false);
+                    p.AddPath(inner, false);
+                    bar.AddRectangle(Box(0.19f, 0.25f, 0.62f, 0.13f));    // title bar, solid again
+                    p.AddPath(bar, false);
+                }
+            }
+            return p;
         }
 
         static float Turn(MacroIcon k) =>
