@@ -1,4 +1,4 @@
-# Glass for Windows — handoff (2026-09-30, session 8)
+# Glass for Windows — handoff (2026-10-01, session 9)
 
 The user asked for a Windows `.exe` of Glass, zipped to share with a friend. It should have **all
 features exactly as on the Mac**, built from this Mac without live Windows testing. They work in
@@ -29,6 +29,8 @@ GitHub, and the old copy is deleted.
 | 12 | Help report for remote diagnosis | ✅ session 4 | Settings > Help > Copy Report; tray item; `--report`; e2e checks it |
 | 13 | First live report: one monitor | ✅ session 5 | Friend's report: one 3440x1440 monitor, two WowB clients stacked, Alt+Tab. Window mode built (1.1.0) |
 | 14 | Live test of window mode | ⏳ the friend | Needs Windows and two game clients. Ask for `Glass.log` back |
+| 15 | Ship the look | ✅ session 9 | 1.3.0 tagged; the theme had been on `main` unreleased since `a1cf9bd` |
+| 16 | Polish the look to match the Mac | ⏳ | Seven items in "The look, measured against the Mac" below |
 
 Zip SHA-256 of the exe inside: `f0a3c330b6ea0e6c35c77bfe6230686d43ec2232e1deaf0c46c159f238056290` (session 4, with the Help tab).
 If you change any source, republish and rezip; the zip is only as fresh as its last build.
@@ -70,6 +72,56 @@ If you change any source, republish and rezip; the zip is only as fresh as its l
    - capture on a real GPU: that frames arrive (`capture format BGRA32`), and that the mirror
      leaves itself out (`could not exclude` must not appear);
    - mixed DPI across two monitors, and the wheel with "Scroll inactive windows" on.
+
+## What session 9 did (1.3.0: release the look that was never released)
+
+**The look was finished in session 8 and then never shipped.** The friend downloaded
+`releases/latest/download/Glass-Windows.zip`, saw plain WinForms, and asked why it looked basic.
+
+- `v1.2.1` points at `0a645a8` (Sep 30, 23:25). The theme landed in `a1cf9bd` (Oct 1, 02:21),
+  about three hours later, and no tag was ever cut after it. `git ls-tree v1.2.1 src/` has **no**
+  `Theme*.cs` at all, so the published zip could only ever look plain.
+- **The Store submission is fine.** Both MSIX runs that produced an artifact (`35edc1d`,
+  `b6fcac5`) contain all four `Theme*.cs` files, so the package in certification already has the
+  new look. Only the GitHub zip was stale.
+- **Version collision, now fixed.** Themed `main` still said `1.2.1`, the same version as the
+  unthemed zip: two different binaries claiming one version. Bumped to **1.3.0** in
+  `Glass.csproj` (`Version`, `FileVersion`) and `app.manifest`.
+  - After any look change, check `grep -rn '1\.2\.1' Glass.csproj app.manifest` comes back
+    clean, and that `python3 tools/pe.py dist/Glass/Glass.exe` reports the new `ProductVersion`.
+- Verified before tagging: `dotnet build -c Release --no-incremental` 0 warnings 0 errors;
+  `--selftest` under Wine `ALL PASSED`; PE `ProductVersion 1.3.0`.
+
+### The look, measured against the Mac
+
+Rendered both sides and compared: the Mac with `/Applications/Glass.app/Contents/MacOS/Glass
+--snapshot DIR`, Windows with `tools/wine.sh 240 dist/Glass/Glass.exe --selftest DIR` and
+`--theme-sample DIR`. Both run headless, so **the whole look can be worked on from the Mac**
+with no Windows machine and no game running.
+
+The frame, marble, side tabs, red and grey buttons and gold type all carried over and are
+recognisably the same product. What is still behind the Mac, in the order it is worth fixing:
+
+1. **Contrast.** Body and hint text read much dimmer than the Mac's; "Record a region for each
+   group size" nearly vanishes into the marble. This is most of why it still reads as cheaper.
+2. **The marble is washed out** — flatter and lighter than the Mac's darker, richer stone.
+3. **No row bands.** `ThemeBand` exists but the Regions preset list does not use it; the Mac
+   tints alternating rows.
+4. **The inset border is faint** next to the Mac's recessed bronze rim.
+5. **Plate buttons have no icons.** The Mac's "The screen" / "The game window" carry monitor
+   glyphs; the Windows plates are bare text.
+6. **Macro icons are flat**, and `dim: true` is barely distinguishable from `dim: false`, so a
+   selected side tab does not stand out the way it does on the Mac.
+7. **Heading scale** — "Regions" is smaller relative to the window than the Mac's.
+
+Parity items that are *not* look bugs:
+- The tray menu is plain on **both** sides (the Mac's `StatusMenu` is an ordinary `NSMenu`), so
+  leave it alone.
+- The region picker is unthemed on both.
+- Three `MessageBox.Show` calls remain system dialogs (`App.cs` x2, `Program.cs`). The Mac
+  replaced those with a themed popup (`WoW.popup`, `glass.swift:3002`). This is a real gap.
+
+**Nothing here ports back to the Mac** — it is Windows catching up to a look the Mac already has.
 
 ## What session 8 did (1.2.1: downloads, updates, CI on real Windows)
 
