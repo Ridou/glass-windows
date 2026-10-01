@@ -45,7 +45,7 @@ namespace Glass
             if (System.Environment.GetEnvironmentVariable("ROUNDTRIP") is string d) { RoundTrip.Write(d); return 0; }
             Dump("defaults");
             Saved.GameRoles = new Dictionary<string, string>
-                { ["Jaysonheal-Doomhowl"] = "healer", ["Ridou-Doomhowl"] = "tank", ["Alt-Doomhowl"] = "dps" };
+                { ["Jaysonheal-Forever"] = "healer", ["Ridou-Forever"] = "tank", ["Alt-Forever"] = "dps" };
             foreach (var s in Game.Settings) Saved.Overrides[s.Key] = !Saved.MacDefault(s);
             Dump("inverted");
             Saved.Overrides.Clear();

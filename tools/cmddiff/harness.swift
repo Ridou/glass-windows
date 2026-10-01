@@ -17,7 +17,7 @@ enum WoWRole: String, CaseIterable {
 }
 
 /// A game client setting, offered as console commands you copy and run yourself. Every CVar
-/// name here was checked against the Classic Era client binary before being offered. Glass
+/// name here was checked against the client binary before being offered. Glass
 /// does not touch the game: it only produces the text.
 struct WoWSetting {
     let key: String
@@ -375,7 +375,7 @@ func dump(_ name: String) {
 }
 
 dump("defaults")
-Saved.wowRoles = ["Jaysonheal-Doomhowl": "healer", "Ridou-Doomhowl": "tank", "Alt-Doomhowl": "dps"]
+Saved.wowRoles = ["Jaysonheal-Forever": "healer", "Ridou-Forever": "tank", "Alt-Forever": "dps"]
 for s in wowSettings { Saved.overrides[s.key] = !s.defaultOn }
 dump("inverted")
 Saved.overrides = [:]
